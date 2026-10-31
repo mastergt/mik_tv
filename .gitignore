@@ -1,0 +1,32 @@
+# Secrets / deployment settings (all levels)
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+id_rsa
+id_ed25519
+
+# Build artifacts and installed dependencies
+node_modules/
+dist/
+build/
+.angular/
+coverage/
+
+# Runtime data, cached EPG, imported logos, logs
+storage/
+logs/
+*.log
+*.sqlite
+
+# Backups and local files
+*.dump
+*.bak
+*.backup
+*.sql.gz
+*.zip
+.vscode/
+.idea/
+.DS_Store

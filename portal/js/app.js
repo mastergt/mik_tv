@@ -6,7 +6,7 @@
     this.api=new root.PortalAPI();this.player=new root.PortalPlayer(U.el('video'));
     if(root.PortalPlatform.current.engine==='mag250')document.body.className+=' platform-mag250';
     this.bootstrap=null;this.provider='';this.authenticated=false;
-    this.items=[];this.offset=0;this.hasMore=false;this.loading=false;
+    this.items=[];this.offset=0;this.hasMore=false;this.loading=false;this.catalogEpoch=0;
     this.selected=0;this.current=null;this.epg=[];this.epgSelected=0;this.favorites=[];
     this.onlyFavorites=false;this.panelOpen=true;this.epgOpen=false;
     this.lease=null;this.playGen=0;this.clockTimer=null;this.toastTimer=null;
@@ -56,6 +56,7 @@
     var list=U.el('provider-select'),arr=this.bootstrap&&this.bootstrap.providers||[],i,opt;
     U.clear(list);for(i=0;i<arr.length;i++){opt=U.create('option','',arr[i].name);opt.value=arr[i].slug;list.appendChild(opt);}
     U.text(U.el('setup-description'),description||'Выберите провайдера');U.show('setup-overlay',true);
+    if(list.options && list.options.length && list.focus)list.focus();
   };
   App.prototype.chooseProvider=function(){var slug=U.el('provider-select').value;if(!slug){this.setError('setup-error','Нет доступных провайдеров');return;}
     this.provider=slug;this.connect();};
@@ -73,7 +74,7 @@
     var self=this, slug=this.provider, uuidKey='uuid:'+slug,secretKey='secret:'+slug;
     var uuid=U.store.get(uuidKey);
     if(!uuid){uuid=U.uuid();U.store.set(uuidKey,uuid);}
-    var secret=U.store.get(secretKey),data={device_uuid:uuid,provider_slug:slug,platform:'portal',device_name:'IPTV Portal',app_version:'0.8.0'};
+    var secret=U.store.get(secretKey),data={device_uuid:uuid,provider_slug:slug,platform:'portal',device_name:'IPTV Portal',app_version:'0.8.2'};
     if(secret)data.device_secret=secret;
     this.api.token='';
     this.api.post('/client/register',data,function(err,reply){
@@ -85,7 +86,7 @@
   };
   App.prototype.connected=function(){
     var self=this;this.loadingState(false);this.updateAccountButton();
-    this.items=[];this.offset=0;this.hasMore=false;this.onlyFavorites=false;
+    this.catalogEpoch++;this.loading=false;this.items=[];this.offset=0;this.hasMore=false;this.onlyFavorites=false;
     this.loadFavorites();this.loadChannels();
     if(cfg.SHOW_LOGIN_ON_START&&!this.authenticated)this.openLogin();
     if(!this._intervals){this._intervals=true;
@@ -98,19 +99,20 @@
   App.prototype.updateAccountButton=function(){U.text(U.el('account-button'),this.authenticated?'Выйти':'Войти');};
   App.prototype.loadChannels=function(){
     if(this.loading || !this.api.token || (this.offset>0 && !this.hasMore))return;
-    var self=this,limit=Math.min(500,Math.max(10,Number(cfg.PAGE_SIZE)||150));this.loading=true;
+    var self=this,limit=Math.min(500,Math.max(10,Number(cfg.PAGE_SIZE)||150)),firstPage=this.offset===0,token=this.api.token,provider=this.provider,epoch=this.catalogEpoch;this.loading=true;
     if(!this.items.length)U.text(U.el('channel-count'),'Загрузка каналов...');
     this.api.get('/client/streams?app_type=tv&limit='+limit+'&offset='+this.offset,function(err,data){
+      if(epoch!==self.catalogEpoch || token!==self.api.token || provider!==self.provider)return;
       self.loading=false;
       if(err){self.toast('Каталог: '+U.errorText(err));U.text(U.el('channel-count'),'Ошибка загрузки');return;}
       var rows=data.items||[],i;for(i=0;i<rows.length;i++)self.items.push(rows[i]);
-      self.offset+=rows.length;self.hasMore=!!data.has_more;self.renderChannels();
-      if(!self.current && self.items.length){
+      self.offset+=rows.length;self.hasMore=!!data.has_more && rows.length>0;
+      if(firstPage && !self.current && self.items.length){
         var remembered=U.store.get('last-stream:'+self.provider),ix=-1;
-        for(i=0;i<self.items.length;i++)if(self.items[i].id===remembered)ix=i;
+        for(i=0;i<self.items.length;i++)if(String(self.items[i].id)===remembered)ix=i;
         self.selected=ix>=0?ix:0;
-        self.renderChannels();
       }
+      self.renderChannels();
     });
   };
   App.prototype.loadFavorites=function(){var self=this;this.api.get('/client/favorites',function(err,data){
@@ -119,7 +121,9 @@
   App.prototype.isFavorite=function(id){var i;for(i=0;i<this.favorites.length;i++)if(this.favorites[i]===String(id))return true;return false;};
   App.prototype.visibleIndices=function(){var a=[],i;for(i=0;i<this.items.length;i++)if(!this.onlyFavorites||this.isFavorite(this.items[i].id))a.push(i);return a;};
   App.prototype.renderChannels=function(){
-    var list=U.el('channel-list'),vis=this.visibleIndices(),i,idx,s,row,num,logo,title,mark,src,self=this;
+    var list=U.el('channel-list'),vis=this.visibleIndices(),i,idx,s,row,num,logo,title,mark,src,self=this,selectedVisible=false;
+    for(i=0;i<vis.length;i++)if(vis[i]===this.selected)selectedVisible=true;
+    if(!selectedVisible && vis.length)this.selected=vis[0];
     U.clear(list);
     if(!vis.length){list.appendChild(U.create('div','empty-list',this.onlyFavorites?'Нет избранных каналов':'Нет доступных телеканалов. При необходимости войдите под абонентом.'));}
     for(i=0;i<vis.length;i++){
@@ -148,11 +152,18 @@
       if(top<list.scrollTop)list.scrollTop=top;else if(bottom>list.scrollTop+list.clientHeight)list.scrollTop=bottom-list.clientHeight;
     }
   };
-  App.prototype.moveSelected=function(delta){var indices=this.visibleIndices(),pos=-1,i;
+  App.prototype.moveSelected=function(delta){var indices=this.visibleIndices(),pos=-1,i,next;
     for(i=0;i<indices.length;i++)if(indices[i]===this.selected)pos=i;
     if(!indices.length)return;
-    if(pos<0)pos=0;else pos=(pos+delta+indices.length)%indices.length;
-    var old=this.selected;this.selected=indices[pos];this.markSelected(old,this.selected,'channel-list','data-idx');
+    if(pos<0)pos=0;
+    next=pos+delta;
+    // A remote must be able to reach every page, without a mouse on 'Load more'.
+    if(delta>0 && next>=indices.length && this.hasMore && !this.onlyFavorites){
+      next=indices.length-1;this.loadChannels();
+    }else if(next>=indices.length)next=next%indices.length;
+    else if(next<0)next=(next%indices.length+indices.length)%indices.length;
+    var old=this.selected;this.selected=indices[next];this.markSelected(old,this.selected,'channel-list','data-idx');
+    if(!this.onlyFavorites && this.hasMore && next>=indices.length-8)this.loadChannels();
   };
   App.prototype.tuneSelected=function(){if(this.items[this.selected])this.tune(this.items[this.selected]);};
   App.prototype.tune=function(stream){
@@ -198,8 +209,24 @@
     this.epg=[];this.updateNowProgram();
     this.api.get('/client/streams/'+encodeURIComponent(String(streamId))+'/epg?from='+encodeURIComponent(start.toISOString())+'&to='+encodeURIComponent(end.toISOString()),function(err,data){
       if(epoch!==self.epgRequest || !self.current || String(self.current.id)!==String(streamId))return;
-      self.epg=err?[]:(data||[]);self.epgSelected=0;self.updateNowProgram();self.renderEPG();
+      self.epg=err?[]:(data||[]);self.epgSelected=self.currentEPGIndex();self.updateNowProgram();self.renderEPG();
     });
+  };
+  App.prototype.currentEPGIndex=function(){var i,p,start,end,now=Date.now();
+    for(i=0;i<this.epg.length;i++){
+      p=this.epg[i];start=U.date(p.starts_at);end=U.date(p.ends_at);
+      if(start && start.getTime()<=now && (!end||end.getTime()>now))return i;
+      if(start && start.getTime()>now)return i;
+    }
+    return this.epg.length?this.epg.length-1:0;
+  };
+  App.prototype.updateEPGDay=function(){var p=this.epg[this.epgSelected],d=p&&U.date(p.starts_at);
+    U.text(U.el('epg-day'),d&&d.toLocaleDateString?d.toLocaleDateString('ru-RU'):'Сегодня');
+  };
+  App.prototype.moveEPG=function(delta){var previous=this.epgSelected;
+    if(!this.epg.length)return;
+    this.epgSelected=Math.max(0,Math.min(this.epg.length-1,previous+delta));
+    this.markSelected(previous,this.epgSelected,'epg-list','data-epg');this.updateEPGDay();
   };
   App.prototype.updateNowProgram=function(){var now=Date.now(),p=null,i,item,epg=this.epg;
     for(i=0;i<epg.length;i++){item=epg[i];if(U.date(item.starts_at)&&U.date(item.starts_at).getTime()<=now && (!item.ends_at||U.date(item.ends_at).getTime()>now)){p=item;break;}}
@@ -210,19 +237,21 @@
       time=U.create('span','epg-time',U.hm(p.starts_at));row.appendChild(time);name=U.create('span','epg-name',p.title||'Без названия');row.appendChild(name);list.appendChild(row);
     }
     if(!this.epg.length)list.appendChild(U.create('div','empty-list','Для этого канала пока нет EPG'));
-    U.text(U.el('epg-day'),new Date().toLocaleDateString?new Date().toLocaleDateString('ru-RU'):'Сегодня');
+    this.updateEPGDay();
   };
   App.prototype.showPanel=function(on){this.panelOpen=!!on;U.show('channel-panel',on);U.show('dim-layer',on||this.epgOpen);if(on)this.renderChannels();};
-  App.prototype.showEPG=function(on){this.epgOpen=!!on;U.show('epg-panel',on);U.show('dim-layer',on||this.panelOpen);if(on){this.showPanel(false);this.renderEPG();}};
+  App.prototype.showEPG=function(on){this.epgOpen=!!on;U.show('epg-panel',on);U.show('dim-layer',on||this.panelOpen);if(on){this.showPanel(false);this.renderEPG();this.markSelected(this.epgSelected,this.epgSelected,'epg-list','data-epg');}};
   App.prototype.openSelectedArchive=function(){
     var p=this.epg[this.epgSelected],self=this,now=Date.now();if(!p||!this.current)return;
+    var generation=this.playGen,streamId=String(this.current.id);
     var start=U.date(p.starts_at),end=U.date(p.ends_at);
     if(!start||!end||start.getTime()>now){this.toast('Запись передачи пока недоступна');return;}
     this.loadingState(true,'Поиск записи в архиве...');
     var query='?start='+encodeURIComponent(start.toISOString())+'&end='+encodeURIComponent(end.toISOString());
     this.api.get('/client/streams/'+encodeURIComponent(String(this.current.id))+'/dvr'+query,function(err,data){
+      if(generation!==self.playGen || !self.current || String(self.current.id)!==streamId)return;
       self.loadingState(false);if(err||!data||!data.sources||!data.sources.length){self.toast('Архив не найден для выбранной передачи');return;}
-      self.archiving=true;self.playSources(data.sources,0,self.playGen);self.updateNow();self.showEPG(false);
+      self.archiving=true;self.playGen++;self.playSources(data.sources,0,self.playGen);self.updateNow();self.showEPG(false);
     });
   };
   App.prototype.returnLive=function(){if(this.current){this.archiving=false;this.tune(this.current);}};
@@ -239,13 +268,13 @@
       if(err){self.setError('login-error',U.errorText(err));return;}
       self.api.token=data.client_token;U.store.set('client-token:'+self.provider,self.api.token);
       self.authenticated=true;self.updateAccountButton();self.closeLogin();U.el('login-password').value='';
-      self.playGen++;self.stopLease();self.player.stop();self.current=null;self.items=[];self.offset=0;self.hasMore=false;
+      self.playGen++;self.stopLease();self.player.stop();self.current=null;self.catalogEpoch++;self.loading=false;self.items=[];self.offset=0;self.hasMore=false;
       self.toast('Добро пожаловать!');self.loadFavorites();self.loadChannels();self.checkMessages();
     });
   };
   App.prototype.logout=function(){var self=this;this.api.post('/client/auth/logout',{},function(){
     U.store.remove('client-token:'+self.provider);self.api.token='';self.authenticated=false;
-    self.playGen++;self.stopLease();self.player.stop();self.current=null;self.items=[];self.offset=0;self.hasMore=false;
+    self.playGen++;self.stopLease();self.player.stop();self.current=null;self.catalogEpoch++;self.loading=false;self.items=[];self.offset=0;self.hasMore=false;
     self.toast('Выход выполнен. Регистрация гостевого терминала...');self.register();
   });};
   App.prototype.checkMessages=function(){var self=this;if(!this.authenticated||!this.api.token)return;
@@ -288,15 +317,36 @@
     code=root.PortalPlatform.key(code);
     // Keep editable controls accessible to keyboards and on-screen input.
     var inInput=target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName||'');
-    if(!U.el('setup-overlay').className.match(/hidden/) || !U.el('login-overlay').className.match(/hidden/))return;
+    if(!U.el('setup-overlay').className.match(/hidden/)){
+      if(code===13){this.chooseProvider();if(ev.preventDefault)ev.preventDefault();}
+      return;
+    }
+    if(!U.el('login-overlay').className.match(/hidden/)){
+      if(code===27||code===8||code===461||code===10009){this.closeLogin();if(ev.preventDefault)ev.preventDefault();return;}
+      if(code===38||code===40){
+        var order=['login-name','login-password','login-submit','login-cancel'],active=document.activeElement,index=0,j;
+        for(j=0;j<order.length;j++)if(U.el(order[j])===active)index=j;
+        index=Math.max(0,Math.min(order.length-1,index+(code===40?1:-1)));
+        if(U.el(order[index]).focus)U.el(order[index]).focus();
+        if(ev.preventDefault)ev.preventDefault();return;
+      }
+      if(code===13){
+        if(document.activeElement===U.el('login-name'))U.el('login-password').focus();
+        else if(document.activeElement===U.el('login-cancel'))this.closeLogin();
+        else this.login();
+        if(ev.preventDefault)ev.preventDefault();return;
+      }
+      return;
+    }
     if(!U.el('message-overlay').className.match(/hidden/)){
       if(code===13||code===27||code===8||code===461){this.dismissMessage();if(ev.preventDefault)ev.preventDefault();}return;
     }
     if(inInput)return;
     var handled=true;
     if((code>=48&&code<=57)||(code>=96&&code<=105))this.numberKey(String(code>=96?code-96:code-48));
-    else if(code===38){if(this.epgOpen){var previous=this.epgSelected;this.epgSelected=Math.max(0,this.epgSelected-1);this.markSelected(previous,this.epgSelected,'epg-list','data-epg');}else{if(!this.panelOpen)this.showPanel(true);this.moveSelected(-1);}}
-    else if(code===40){if(this.epgOpen){var previous=this.epgSelected;this.epgSelected=Math.min(Math.max(0,this.epg.length-1),this.epgSelected+1);this.markSelected(previous,this.epgSelected,'epg-list','data-epg');}else{if(!this.panelOpen)this.showPanel(true);this.moveSelected(1);}}
+    else if(code===38){if(this.epgOpen)this.moveEPG(-1);else{if(!this.panelOpen)this.showPanel(true);this.moveSelected(-1);}}
+    else if(code===40){if(this.epgOpen)this.moveEPG(1);else{if(!this.panelOpen)this.showPanel(true);this.moveSelected(1);}}
+    else if(code===33||code===34){if(this.epgOpen)this.moveEPG(code===34?7:-7);else{if(!this.panelOpen)this.showPanel(true);this.moveSelected(code===34?7:-7);}}
     else if(code===13){if(this.epgOpen)this.openSelectedArchive();else if(this.panelOpen)this.tuneSelected();else this.showPanel(true);}
     else if(code===27||code===8||code===461||code===10009){if(this.epgOpen)this.showEPG(false);else if(this.panelOpen)this.showPanel(false);else if(this.archiving)this.returnLive();else this.showPanel(true);}
     else if(code===37){if(this.epgOpen)this.showEPG(false);else this.showPanel(true);}
