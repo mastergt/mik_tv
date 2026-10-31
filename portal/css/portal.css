@@ -202,3 +202,36 @@ button:focus,input:focus,select:focus { outline:3px solid #ffb000; outline-offse
   .tv-keyboard-on #login-form input {height:29px;font-size:15px;}
   .tv-keyboard-on #login-form label {font-size:12px;margin:3px 0 1px;}
 }
+
+/* mik_tv A.6: no-gradients, no large shadows for MAG home menu. */
+.home-button {margin-left:16px;vertical-align:middle;font-size:17px;}
+.panel-tabs .tab {font-size:16px;margin-right:3px;padding-left:7px;padding-right:7px;}
+.panel-subtitle {white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#channel-filter-name {color:#fbc26b;}
+.tv-home-menu {position:absolute;z-index:80;top:9%;bottom:9%;left:19%;right:19%;background:rgba(13,19,29,.98);
+  border:2px solid #647184;color:#f3f5fa;overflow:hidden;}
+.tv-home-header {height:58px;line-height:58px;border-bottom:1px solid #465364;padding:0 20px;font-size:22px;font-weight:bold;}
+.tv-home-back {float:right;margin-top:11px;padding:5px 15px;color:#fff;background:#344257;border:1px solid #6e7a89;font-size:16px;}
+.tv-menu-list {position:absolute;top:58px;bottom:53px;left:0;right:0;overflow:hidden;}
+.tv-menu-row {height:57px;padding:8px 20px;border-bottom:1px solid #2c394b;cursor:pointer;white-space:nowrap;overflow:hidden;}
+.tv-menu-row.selected {background:#ffb000;color:#141d29;}
+.tv-menu-row-title {display:block;font-size:20px;font-weight:bold;overflow:hidden;text-overflow:ellipsis;}
+.tv-menu-row-detail {display:block;font-size:13px;color:#adbcd0;overflow:hidden;text-overflow:ellipsis;}
+.tv-menu-row.selected .tv-menu-row-detail {color:#26364a;}
+.tv-home-footer {position:absolute;bottom:0;left:0;right:0;height:53px;line-height:53px;background:#1c2738;
+  padding:0 18px;font-size:14px;color:#abb7c9;white-space:nowrap;overflow:hidden;}
+#tv-menu-page {float:right;color:#ffcb64;}
+.platform-mag250 .tv-home-menu {background:#111c2a;border-radius:0;box-shadow:none;}
+@media (max-height:750px), (max-width:850px){
+ .home-button {padding:2px 6px;font-size:13px;margin-left:5px;}
+ .panel-tabs .tab {font-size:12px;margin-right:1px;padding-left:5px;padding-right:5px;}
+ .panel-subtitle {font-size:11px;}
+ .tv-home-menu {top:3%;bottom:3%;left:7%;right:7%;}
+ .tv-home-header {height:38px;line-height:38px;font-size:17px;padding:0 11px;}
+ .tv-home-back {margin-top:5px;padding:2px 9px;font-size:13px;}
+ .tv-menu-list {top:38px;bottom:35px;}
+ .tv-menu-row {height:44px;padding:5px 12px;}
+ .tv-menu-row-title {font-size:16px;}
+ .tv-menu-row-detail {font-size:11px;}
+ .tv-home-footer {height:35px;line-height:35px;font-size:11px;padding:0 9px;}
+}
