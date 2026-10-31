@@ -11,6 +11,7 @@
     this.onlyFavorites=false;this.panelOpen=true;this.epgOpen=false;
     this.lease=null;this.playGen=0;this.clockTimer=null;this.toastTimer=null;
     this.numBuffer='';this.numTimer=null;this.msgQueue=[];this.activeMessage=null;
+    this.previousStream=null;this.infoTimer=null;this.channelWindowStart=-1;this.channelWindowSize=19;this.pendingZap=0;this.pendingNumber=null;this.numberSearchPages=0;
     this.busy=false;this.epgRequest=0;this.epgWindowStart=-1;this.dvrRequest=0;this.dvrSession=null;this.dvrPaused=false;
   }
   App.prototype.toast=function(message){U.text(U.el('toast'),message);U.show('toast',true);if(this.toastTimer)clearTimeout(this.toastTimer);this.toastTimer=setTimeout(function(){U.show('toast',false);},4000);};
@@ -28,6 +29,8 @@
     U.on(U.el('tab-all'),'click',function(){self.onlyFavorites=false;self.renderChannels();});
     U.on(U.el('tab-fav'),'click',function(){self.onlyFavorites=true;self.renderChannels();});
     U.on(U.el('btn-more'),'click',function(){self.loadChannels();});
+    U.on(U.el('tab-all'),'click',function(){self.channelWindowStart=-1;});
+    U.on(U.el('tab-fav'),'click',function(){self.channelWindowStart=-1;});
     U.on(U.el('message-close'),'click',function(){self.dismissMessage();});
     U.on(U.el('channel-list'),'click',function(e){var n=e.target||e.srcElement;while(n && n!==U.el('channel-list') && !n.getAttribute('data-idx'))n=n.parentNode;
       if(n&&n.getAttribute&&n.getAttribute('data-idx')){self.selected=Number(n.getAttribute('data-idx'));self.tuneSelected();}});
@@ -46,7 +49,7 @@
   };
   App.prototype.start=function(){
     var self=this;this.bind();this.setTheme(U.store.get('theme')||cfg.THEME);
-    if(root.PortalDiagnostics){root.PortalDiagnostics.init();root.PortalDiagnostics.log('INFO','mik_tv v0.8.3, player='+this.player.engine);}
+    if(root.PortalDiagnostics){root.PortalDiagnostics.init();root.PortalDiagnostics.log('INFO','mik_tv v0.8.4, player='+this.player.engine);}
     this.clock();this.clockTimer=setInterval(function(){self.clock();},30000);
     this.loadingState(true,'Загрузка конфигурации...');
     this.api.get('/client/bootstrap',function(err,data){
@@ -82,7 +85,7 @@
     var self=this, slug=this.provider, uuidKey='uuid:'+slug,secretKey='secret:'+slug;
     var uuid=U.store.get(uuidKey);
     if(!uuid){uuid=U.uuid();U.store.set(uuidKey,uuid);}
-    var secret=U.store.get(secretKey),data={device_uuid:uuid,provider_slug:slug,platform:'portal',device_name:'mik_tv Portal',app_version:'0.8.3'};
+    var secret=U.store.get(secretKey),data={device_uuid:uuid,provider_slug:slug,platform:'portal',device_name:'mik_tv Portal',app_version:'0.8.4'};
     if(secret)data.device_secret=secret;
     this.api.token='';
     this.api.post('/client/register',data,function(err,reply){
@@ -95,6 +98,7 @@
   App.prototype.connected=function(){
     var self=this;this.loadingState(false);this.updateAccountButton();
     this.catalogEpoch++;this.loading=false;this.items=[];this.offset=0;this.hasMore=false;this.onlyFavorites=false;
+    this.channelWindowStart=-1;this.pendingZap=0;this.pendingNumber=null;this.numberSearchPages=0;this.previousStream=null;
     this.loadFavorites();this.loadChannels();
     if(cfg.SHOW_LOGIN_ON_START&&!this.authenticated)this.openLogin();
     if(!this._intervals){this._intervals=true;
@@ -112,7 +116,7 @@
     this.api.get('/client/streams?app_type=tv&limit='+limit+'&offset='+this.offset,function(err,data){
       if(epoch!==self.catalogEpoch || token!==self.api.token || provider!==self.provider)return;
       self.loading=false;
-      if(err){self.toast('Каталог: '+U.errorText(err));U.text(U.el('channel-count'),'Ошибка загрузки');return;}
+      if(err){self.pendingNumber=null;self.pendingZap=0;self.toast('Каталог: '+U.errorText(err));U.text(U.el('channel-count'),'Ошибка загрузки');return;}
       var rows=data.items||[],i;for(i=0;i<rows.length;i++)self.items.push(rows[i]);
       self.offset+=rows.length;self.hasMore=!!data.has_more && rows.length>0;
       if(firstPage && !self.current && self.items.length){
@@ -121,6 +125,8 @@
         self.selected=ix>=0?ix:0;
       }
       self.renderChannels();
+      if(self.pendingNumber!==null)self.searchNextNumberPage();
+      if(self.pendingZap){var delta=self.pendingZap;self.pendingZap=0;self.zap(delta);}
     });
   };
   App.prototype.loadFavorites=function(){var self=this;this.api.get('/client/favorites',function(err,data){
@@ -130,11 +136,16 @@
   App.prototype.visibleIndices=function(){var a=[],i;for(i=0;i<this.items.length;i++)if(!this.onlyFavorites||this.isFavorite(this.items[i].id))a.push(i);return a;};
   App.prototype.renderChannels=function(){
     var list=U.el('channel-list'),vis=this.visibleIndices(),i,idx,s,row,num,logo,title,mark,src,self=this,selectedVisible=false;
-    for(i=0;i<vis.length;i++)if(vis[i]===this.selected)selectedVisible=true;
-    if(!selectedVisible && vis.length)this.selected=vis[0];
+    var mag=this.player.engine==='mag250',pos=-1,start=0,end=vis.length;
+    for(i=0;i<vis.length;i++)if(vis[i]===this.selected){selectedVisible=true;pos=i;break;}
+    if(!selectedVisible && vis.length){this.selected=vis[0];pos=0;}
+    if(mag && vis.length>this.channelWindowSize){
+      start=Math.max(0,Math.min(pos-7,vis.length-this.channelWindowSize));
+      end=Math.min(vis.length,start+this.channelWindowSize);this.channelWindowStart=start;
+    }else this.channelWindowStart=0;
     U.clear(list);
     if(!vis.length){list.appendChild(U.create('div','empty-list',this.onlyFavorites?'Нет избранных каналов':'Нет доступных телеканалов. При необходимости войдите под абонентом.'));}
-    for(i=0;i<vis.length;i++){
+    for(i=start;i<end;i++){
       idx=vis[i];s=this.items[idx];row=U.create('div','channel-row'+(idx===this.selected?' selected':'')+(this.current&&String(this.current.id)===String(s.id)?' playing':''));
       row.setAttribute('data-idx',String(idx));
       num=U.create('span','row-number',s.number||idx+1);row.appendChild(num);
@@ -143,7 +154,7 @@
       if(this.isFavorite(s.id)){mark=U.create('span','favorite-mark','★');row.appendChild(mark);}
       list.appendChild(row);
     }
-    U.text(U.el('channel-count'),this.items.length+' каналов'+(this.hasMore?' · список неполный':''));
+    U.text(U.el('channel-count'),(mag&&vis.length ? (start+1)+'–'+end+' из '+vis.length+' · ' : '')+this.items.length+' каналов'+(this.hasMore?' · список неполный':''));
     U.show('btn-more',this.hasMore && !this.onlyFavorites);
     U.el('tab-all').className='tab'+(!this.onlyFavorites?' active':'');
     U.el('tab-fav').className='tab'+(this.onlyFavorites?' active':'');
@@ -170,17 +181,47 @@
       next=indices.length-1;this.loadChannels();
     }else if(next>=indices.length)next=next%indices.length;
     else if(next<0)next=(next%indices.length+indices.length)%indices.length;
-    var old=this.selected;this.selected=indices[next];this.markSelected(old,this.selected,'channel-list','data-idx');
+    var old=this.selected;this.selected=indices[next];
+    if(this.player.engine==='mag250' && (next<this.channelWindowStart+3 || next>=this.channelWindowStart+this.channelWindowSize-3))this.renderChannels();
+    else this.markSelected(old,this.selected,'channel-list','data-idx');
     if(!this.onlyFavorites && this.hasMore && next>=indices.length-8)this.loadChannels();
   };
   App.prototype.tuneSelected=function(){if(this.items[this.selected])this.tune(this.items[this.selected]);};
+  App.prototype.zap=function(delta){
+    var indices=this.visibleIndices(),pos=-1,i,next;
+    if(!indices.length)return;
+    for(i=0;i<indices.length;i++)if(this.current && String(this.items[indices[i]].id)===String(this.current.id)){pos=i;break;}
+    if(pos<0)for(i=0;i<indices.length;i++)if(indices[i]===this.selected){pos=i;break;}
+    next=pos+delta;
+    if(next>=indices.length && this.hasMore && !this.onlyFavorites){
+      this.pendingZap=delta;this.loadChannels();return;
+    }
+    next=(next%indices.length+indices.length)%indices.length;
+    this.selected=indices[next];this.tuneSelected();
+  };
+  App.prototype.tunePrevious=function(){
+    if(this.previousStream && (!this.current||String(this.previousStream.id)!==String(this.current.id)))this.tune(this.previousStream);
+    else this.toast('Предыдущий канал ещё не выбран');
+  };
+  App.prototype.showInfo=function(){
+    var self=this;U.show('info-overlay',true);
+    if(this.infoTimer)clearTimeout(this.infoTimer);
+    this.infoTimer=setTimeout(function(){if(!self.panelOpen && !self.epgOpen && self.current)U.show('info-overlay',false);},6000);
+  };
+  App.prototype.toggleInfo=function(){
+    if(this.infoTimer)clearTimeout(this.infoTimer);this.infoTimer=null;
+    var shown=U.el('info-overlay').className.indexOf('hidden')<0;
+    if(shown && !this.panelOpen)U.show('info-overlay',false);else this.showInfo();
+  };
   App.prototype.tune=function(stream){
     if(!stream)return;
+    this.pendingNumber=null;this.numberSearchPages=0;this.pendingZap=0;
+    if(this.current && String(this.current.id)!==String(stream.id))this.previousStream=this.current;
     var self=this,generation=++this.playGen;
     this.dvrRequest++;this.dvrSession=null;this.dvrPaused=false;E.renderDVR(null,false);
     this.stopLease();this.player.stop();this.archiving=false;this.current=stream;
     U.store.set('last-stream:'+this.provider,String(stream.id));
-    this.updateNow();this.showPanel(false);this.showEPG(false);this.loadingState(true,'Открытие канала...');
+    this.updateNow();this.showPanel(false);this.showEPG(false);this.showInfo();this.loadingState(true,'Открытие канала...');
     this.api.post('/client/playback/start',{stream_id:String(stream.id)},function(err,data){
       if(generation!==self.playGen)return;
       self.loadingState(false);
@@ -272,7 +313,7 @@
     this.updateEPGDay();this.renderEPGFocus();
     if(this.epgOpen)this.markSelected(this.epgSelected,this.epgSelected,'epg-list','data-epg');
   };
-  App.prototype.showPanel=function(on){this.panelOpen=!!on;U.show('channel-panel',on);U.show('dim-layer',on||this.epgOpen);if(on)this.renderChannels();};
+  App.prototype.showPanel=function(on){this.panelOpen=!!on;U.show('channel-panel',on);U.show('dim-layer',on||this.epgOpen);if(on){this.renderChannels();U.show('info-overlay',true);}else if(this.current)this.showInfo();};
   App.prototype.showEPG=function(on){this.epgOpen=!!on;U.show('epg-panel',on);U.show('dim-layer',on||this.panelOpen);if(on){this.showPanel(false);this.renderEPG();this.markSelected(this.epgSelected,this.epgSelected,'epg-list','data-epg');}};
   App.prototype.openSelectedArchive=function(){
     var p=this.epg[this.epgSelected];if(!p||!this.current)return;
@@ -324,13 +365,13 @@
       if(err){self.setError('login-error',U.errorText(err));return;}
       self.api.token=data.client_token;U.store.set('client-token:'+self.provider,self.api.token);
       self.authenticated=true;self.updateAccountButton();self.closeLogin();U.el('login-password').value='';
-      self.playGen++;self.stopLease();self.player.stop();self.current=null;self.dvrSession=null;self.archiving=false;self.dvrPaused=false;self.dvrRequest++;E.renderDVR(null,false);self.catalogEpoch++;self.loading=false;self.items=[];self.offset=0;self.hasMore=false;
+      self.playGen++;self.stopLease();self.player.stop();self.current=null;self.dvrSession=null;self.archiving=false;self.dvrPaused=false;self.dvrRequest++;E.renderDVR(null,false);self.catalogEpoch++;self.loading=false;self.items=[];self.offset=0;self.hasMore=false;self.channelWindowStart=-1;self.pendingZap=0;self.pendingNumber=null;self.numberSearchPages=0;self.previousStream=null;
       self.toast('Добро пожаловать!');self.loadFavorites();self.loadChannels();self.checkMessages();
     });
   };
   App.prototype.logout=function(){var self=this;this.api.post('/client/auth/logout',{},function(){
     U.store.remove('client-token:'+self.provider);self.api.token='';self.authenticated=false;
-    self.playGen++;self.stopLease();self.player.stop();self.current=null;self.dvrSession=null;self.archiving=false;self.dvrPaused=false;self.dvrRequest++;E.renderDVR(null,false);self.catalogEpoch++;self.loading=false;self.items=[];self.offset=0;self.hasMore=false;
+    self.playGen++;self.stopLease();self.player.stop();self.current=null;self.dvrSession=null;self.archiving=false;self.dvrPaused=false;self.dvrRequest++;E.renderDVR(null,false);self.catalogEpoch++;self.loading=false;self.items=[];self.offset=0;self.hasMore=false;self.channelWindowStart=-1;self.pendingZap=0;self.pendingNumber=null;self.numberSearchPages=0;self.previousStream=null;
     self.toast('Выход выполнен. Регистрация гостевого терминала...');self.register();
   });};
   App.prototype.checkMessages=function(){var self=this;if(!this.authenticated||!this.api.token)return;
@@ -363,9 +404,22 @@
   App.prototype.clock=function(){var d=new Date();U.text(U.el('clock'),('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2));};
   App.prototype.numberKey=function(n){var self=this;this.numBuffer+=n;U.text(U.el('number-popup'),this.numBuffer);U.show('number-popup',true);
     if(this.numTimer)clearTimeout(this.numTimer);this.numTimer=setTimeout(function(){self.commitNumber();},1600);};
-  App.prototype.commitNumber=function(){var n=Number(this.numBuffer),i;this.numBuffer='';U.show('number-popup',false);
-    for(i=0;i<this.items.length;i++)if(Number(this.items[i].number)===n){this.selected=i;this.tuneSelected();return;}
-    this.toast('Канал '+n+' не найден в загруженном списке');};
+  App.prototype.commitNumber=function(){var n=Number(this.numBuffer);this.numBuffer='';U.show('number-popup',false);
+    if(!isFinite(n)||n<0)return;
+    this.pendingZap=0;this.pendingNumber=n;this.numberSearchPages=0;this.searchNextNumberPage();
+  };
+  App.prototype.searchNextNumberPage=function(){
+    if(this.pendingNumber===null)return;
+    var n=this.pendingNumber,i;
+    for(i=0;i<this.items.length;i++)if(Number(this.items[i].number)===n){
+      this.pendingNumber=null;this.numberSearchPages=0;this.selected=i;this.tuneSelected();return;
+    }
+    if(this.hasMore && this.numberSearchPages<12){
+      if(!this.loading){this.numberSearchPages++;this.loadChannels();}return;
+    }
+    if(this.loading)return;
+    this.pendingNumber=null;this.toast('Канал '+n+' не найден'+(this.hasMore?' (просмотрено 12 страниц)':''));
+  };
   App.prototype.keyDown=function(ev){
     var code=ev.keyCode||ev.which||0, key=ev.key||'',target=ev.target||ev.srcElement;
     if(code===120||code===406){if(root.PortalDiagnostics)root.PortalDiagnostics.toggle();if(ev.preventDefault)ev.preventDefault();return;}
@@ -398,11 +452,14 @@
       if(code===13||code===27||code===8||code===461){this.dismissMessage();if(ev.preventDefault)ev.preventDefault();}return;
     }
     if(inInput)return;
+    if(key==='ChannelUp'){this.zap(1);if(ev.preventDefault)ev.preventDefault();return;}
+    if(key==='ChannelDown'){this.zap(-1);if(ev.preventDefault)ev.preventDefault();return;}
+    if(key==='ChannelPrevious'){this.tunePrevious();if(ev.preventDefault)ev.preventDefault();return;}
     var handled=true;
     if((code>=48&&code<=57)||(code>=96&&code<=105))this.numberKey(String(code>=96?code-96:code-48));
     else if(code===38){if(this.epgOpen)this.moveEPG(-1);else{if(!this.panelOpen)this.showPanel(true);this.moveSelected(-1);}}
     else if(code===40){if(this.epgOpen)this.moveEPG(1);else{if(!this.panelOpen)this.showPanel(true);this.moveSelected(1);}}
-    else if(code===33||code===34){if(this.epgOpen)this.moveEPG(code===34?7:-7);else{if(!this.panelOpen)this.showPanel(true);this.moveSelected(code===34?7:-7);}}
+    else if(code===33||code===34){if(this.epgOpen)this.moveEPG(code===34?7:-7);else if(!this.panelOpen)this.zap(code===33?1:-1);else this.moveSelected(code===34?7:-7);}
     else if(code===13){if(this.epgOpen)this.openSelectedArchive();else if(this.panelOpen)this.tuneSelected();else this.showPanel(true);}
     else if(code===27||code===8||code===461||code===10009){if(this.epgOpen)this.showEPG(false);else if(this.panelOpen)this.showPanel(false);else if(this.archiving)this.returnLive();else this.showPanel(true);}
     else if(code===37){if(this.epgOpen)this.moveEPG(-1);else if(this.archiving&&!this.panelOpen)this.seekDVR(-60);else this.showPanel(true);}
@@ -414,6 +471,10 @@
     else if(code===413){if(this.archiving){this.dvrPaused=true;this.updateDVR();}this.player.pause();}
     else if(code===32){if(this.archiving)this.toggleDVRPause();else handled=false;}
     else if(code===82){if(this.archiving)this.returnLive();else handled=false;}
+    else if(code===427)this.zap(1);
+    else if(code===428)this.zap(-1);
+    else if(code===81)this.tunePrevious();
+    else if(code===79)this.toggleInfo();
     else if(code===447||code===107||code===187){this.toast('Громкость '+this.player.volumeChange(10)+'%');}
     else if(code===448||code===109||code===189){this.toast('Громкость '+this.player.volumeChange(-10)+'%');}
     else if(code===77){this.player.toggleMute();}
