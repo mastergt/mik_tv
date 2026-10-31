@@ -20,7 +20,16 @@ http.createServer((req,res)=>{
   if(pathname==='/api/v1/client/me')return send(res,200,{authenticated:false,provider_id:1});
   if(pathname==='/api/v1/client/favorites')return send(res,200,[]);
   if(pathname==='/api/v1/client/streams')return send(res,200,{items:channels,has_more:false,offset:0,limit:150});
-  if(pathname.endsWith('/epg'))return send(res,200,[]);
+  if(pathname.endsWith('/epg')){
+    const now=Date.now(),hours=3600000,base=Math.floor(now/hours)*hours;
+    const guide=[];
+    for(let i=-48;i<24;i++)guide.push({id:String(i+49),
+      starts_at:new Date(base+i*hours).toISOString(),ends_at:new Date(base+(i+1)*hours).toISOString(),
+      title:['Новости','Художественный фильм','Познавательная передача','Спортивный обзор'][((i%4)+4)%4],
+      description:'Демонстрационные данные EPG для испытания управления пультом'});
+    return send(res,200,guide);
+  }
+  if(pathname.endsWith('/dvr'))return send(res,200,{sources:[]});
   if(pathname==='/api/v1/client/messages')return send(res,200,{items:[]});
   if(pathname==='/api/v1/client/heartbeat')return send(res,200,{ok:true});
   if(pathname==='/api/v1/client/playback/start')return send(res,200,{lease_token:'t'.repeat(43),expires_in:150,heartbeat_after_seconds:75,sources:[]});

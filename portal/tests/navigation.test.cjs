@@ -12,6 +12,7 @@ const win={IPTV_CONFIG:{PAGE_SIZE:3,THEME:'modern'},PortalUtil:util,
   PortalPlayer:function(){this.stop=function(){};this.play=function(){};},
   PortalAPI:function(){this.token='';this.get=function(){};}};
 const ctx=vm.createContext({window:win,document,Date,Math,Number,String,encodeURIComponent,decodeURIComponent,setTimeout,clearTimeout});
+vm.runInContext(fs.readFileSync(path.join(__dirname,'../js/epg-dvr.js'),'utf8'),ctx);
 vm.runInContext(source,ctx);
 const app=new win.IPTVPortalApp();
 app.provider='test';app.api.token='token';app.items=[{id:1},{id:2},{id:3}];app.offset=3;app.hasMore=true;app.selected=2;
