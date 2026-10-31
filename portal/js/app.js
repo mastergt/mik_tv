@@ -11,6 +11,7 @@
     this.onlyFavorites=false;this.panelOpen=true;this.epgOpen=false;
     this.lease=null;this.playGen=0;this.clockTimer=null;this.toastTimer=null;
     this.numBuffer='';this.numTimer=null;this.msgQueue=[];this.activeMessage=null;
+    this.keyboard=root.PortalKeyboard?new root.PortalKeyboard():null;
     this.previousStream=null;this.infoTimer=null;this.channelWindowStart=-1;this.channelWindowSize=19;this.pendingZap=0;this.pendingNumber=null;this.numberSearchPages=0;
     this.busy=false;this.epgRequest=0;this.epgWindowStart=-1;this.dvrRequest=0;this.dvrSession=null;this.dvrPaused=false;
   }
@@ -23,6 +24,19 @@
     U.on(U.el('connect-button'),'click',function(){self.chooseProvider();});
     U.on(U.el('login-form'),'submit',function(e){if(e.preventDefault)e.preventDefault();self.login();return false;});
     U.on(U.el('login-cancel'),'click',function(){self.closeLogin();});
+    U.on(U.el('login-keyboard-button'),'click',function(){self.openKeyboard('login-name');});
+    U.on(U.el('login-name'),'dblclick',function(){self.openKeyboard('login-name');});
+    U.on(U.el('login-password'),'dblclick',function(){self.openKeyboard('login-password');});
+    if(this.keyboard){
+      this.keyboard.onNext=function(){
+        if(self.keyboard.target===U.el('login-name'))self.openKeyboard('login-password');
+        else {self.keyboard.close();U.el('login-submit').focus();}
+      };
+      this.keyboard.onSubmit=function(){
+        if(self.keyboard.target===U.el('login-name'))self.openKeyboard('login-password');
+        else self.login();
+      };
+    }
     U.on(U.el('account-button'),'click',function(){if(self.authenticated)self.logout();else self.openLogin();});
     U.on(U.el('theme-button'),'click',function(){self.setTheme(U.el('app').className==='theme-modern'?'classic':'modern');});
     U.on(U.el('video-screen'),'click',function(){self.player.tryPlay();});
@@ -49,7 +63,7 @@
   };
   App.prototype.start=function(){
     var self=this;this.bind();this.setTheme(U.store.get('theme')||cfg.THEME);
-    if(root.PortalDiagnostics){root.PortalDiagnostics.init();root.PortalDiagnostics.log('INFO','mik_tv v0.8.4, player='+this.player.engine);}
+    if(root.PortalDiagnostics){root.PortalDiagnostics.init();root.PortalDiagnostics.log('INFO','mik_tv v0.8.5, player='+this.player.engine);}
     this.clock();this.clockTimer=setInterval(function(){self.clock();},30000);
     this.loadingState(true,'Загрузка конфигурации...');
     this.api.get('/client/bootstrap',function(err,data){
@@ -85,7 +99,7 @@
     var self=this, slug=this.provider, uuidKey='uuid:'+slug,secretKey='secret:'+slug;
     var uuid=U.store.get(uuidKey);
     if(!uuid){uuid=U.uuid();U.store.set(uuidKey,uuid);}
-    var secret=U.store.get(secretKey),data={device_uuid:uuid,provider_slug:slug,platform:'portal',device_name:'mik_tv Portal',app_version:'0.8.4'};
+    var secret=U.store.get(secretKey),data={device_uuid:uuid,provider_slug:slug,platform:'portal',device_name:'mik_tv Portal',app_version:'0.8.5'};
     if(secret)data.device_secret=secret;
     this.api.token='';
     this.api.post('/client/register',data,function(err,reply){
@@ -357,8 +371,20 @@
     if(fav)this.api.del(path,done);else this.api.post(path,{},done);
     function done(err){if(err){self.toast(U.errorText(err));return;}self.loadFavorites();self.toast(fav?'Удалено из избранного':'Добавлено в избранное');}
   };
-  App.prototype.openLogin=function(){if(!this.api.token){this.toast('Терминал не подключён');return;}U.show('login-overlay',true);U.el('login-name').focus();};
-  App.prototype.closeLogin=function(){U.show('login-overlay',false);this.setError('login-error','');};
+  App.prototype.openKeyboard=function(fieldId){
+    if(!this.keyboard)return;
+    var field=U.el(fieldId);
+    if(field && !U.el('login-overlay').className.match(/hidden/))this.keyboard.open(field);
+  };
+  App.prototype.openLogin=function(){
+    if(!this.api.token){this.toast('Терминал не подключён');return;}
+    U.show('login-overlay',true);U.el('login-name').focus();
+    if(this.player.engine==='mag250')this.openKeyboard('login-name');
+  };
+  App.prototype.closeLogin=function(){
+    if(this.keyboard)this.keyboard.close();
+    U.show('login-overlay',false);this.setError('login-error','');U.el('login-password').value='';
+  };
   App.prototype.login=function(){var self=this,username=U.el('login-name').value,password=U.el('login-password').value;
     if(!username||!password){this.setError('login-error','Введите логин и пароль');return;}
     this.api.post('/client/auth/login',{username:username,password:password},function(err,data){
@@ -425,6 +451,7 @@
     if(code===120||code===406){if(root.PortalDiagnostics)root.PortalDiagnostics.toggle();if(ev.preventDefault)ev.preventDefault();return;}
     if(root.PortalDiagnostics&&root.PortalDiagnostics.isVisible()){if(code===27||code===8){root.PortalDiagnostics.toggle(false);if(ev.preventDefault)ev.preventDefault();}return;}
     code=root.PortalPlatform.key(code);
+    if(this.keyboard && this.keyboard.keyDown(code)){if(ev.preventDefault)ev.preventDefault();ev.returnValue=false;return;}
     // Keep editable controls accessible to keyboards and on-screen input.
     var inInput=target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName||'');
     if(!U.el('setup-overlay').className.match(/hidden/)){

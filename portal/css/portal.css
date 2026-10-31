@@ -161,3 +161,44 @@ button:focus,input:focus,select:focus { outline:3px solid #ffb000; outline-offse
   .dvr-track,#dvr-progress {height:6px;}
   .dvr-actions button {font-size:12px;padding:3px 8px;margin:0 3px;}
 }
+
+/* mik_tv v0.8.5: inexpensive remote-controlled login keyboard. */
+.login-keyboard-control {text-align:left;margin-top:10px;}
+#login-keyboard-button {font-size:15px;padding:7px 12px;margin:0;}
+.tv-keyboard {position:absolute;z-index:110;left:7%;right:7%;bottom:2%;height:342px;
+  background:#111a27;color:#edf1f7;border:2px solid #758397;padding:8px 14px 6px;overflow:hidden;}
+.tv-keyboard-head {height:40px;white-space:nowrap;overflow:hidden;border-bottom:1px solid #3b4859;
+  font-size:17px;line-height:35px;}
+.tv-keyboard-head strong {display:inline-block;color:#ffb000;width:100px;}
+#tv-keyboard-field {display:inline-block;white-space:nowrap;overflow:hidden;max-width:75%;vertical-align:middle;color:#e7eef8;}
+.tv-keyboard-rows {height:262px;}
+.tv-key-row {display:table;table-layout:fixed;width:100%;height:52px;border-spacing:3px;}
+.tv-key {display:table-cell;vertical-align:middle;text-align:center;height:44px;
+  background:#273345;color:#eef2f8;border:1px solid #66768c;font-size:20px;font-weight:bold;padding:0;}
+.tv-key-action {font-size:15px;background:#32435b;}
+.tv-key-selected {background:#ffb000!important;color:#161c22!important;border:2px solid #fff!important;}
+.tv-keyboard-hint {color:#b8c4d5;font-size:13px;padding:2px 4px 0;}
+.tv-keyboard-on #login-overlay {padding-top:1vh;}
+.tv-keyboard-on #login-form {width:620px;max-width:91%;padding:8px 20px;border-radius:0;}
+.tv-keyboard-on #login-form h1 {font-size:21px;margin:0 0 4px;}
+.tv-keyboard-on #login-form p {display:none;}
+.tv-keyboard-on #login-form label {font-size:14px;margin:5px 0 2px;}
+.tv-keyboard-on #login-form input {height:36px;font-size:17px;padding:4px 10px;}
+.tv-keyboard-on #login-form .dialog-actions {display:none;}
+.tv-keyboard-on #login-keyboard-button {display:none;}
+.platform-mag250 .tv-keyboard {box-shadow:none;border-radius:0;}
+.platform-mag250 .tv-key {border-radius:0;}
+@media(max-height:650px), (max-width:850px){
+  .tv-keyboard {left:2%;right:2%;bottom:1%;height:276px;padding:4px 8px;}
+  .tv-keyboard-head {height:30px;line-height:26px;font-size:13px;}
+  .tv-keyboard-head strong {width:65px;}
+  .tv-keyboard-rows {height:213px;}
+  .tv-key-row {height:42px;border-spacing:2px;}
+  .tv-key {height:36px;font-size:16px;}
+  .tv-key-action {font-size:12px;}
+  .tv-keyboard-hint {font-size:11px;}
+  .tv-keyboard-on #login-form {padding:4px 12px;}
+  .tv-keyboard-on #login-form h1 {font-size:17px;}
+  .tv-keyboard-on #login-form input {height:29px;font-size:15px;}
+  .tv-keyboard-on #login-form label {font-size:12px;margin:3px 0 1px;}
+}

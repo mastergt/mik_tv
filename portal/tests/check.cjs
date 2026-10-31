@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const root=path.join(__dirname,'..');
-for(const name of ['config','util','api','player','epg-dvr','app']){
+for(const name of ['config','util','api','player','epg-dvr','tv-keyboard','app']){
   const p=path.join(root,'js',name+'.js'),code=fs.readFileSync(p,'utf8');
   new vm.Script(code,{filename:name+'.js'});
   assert(!/\b(?:async\s+function|await\s|class\s|const\s|let\s|=>)\b/.test(code),`Unexpected modern JS construct in ${name}.js`);
