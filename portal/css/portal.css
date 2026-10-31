@@ -114,3 +114,50 @@ button:focus,input:focus,select:focus { outline:3px solid #ffb000; outline-offse
 .diag-actions {margin-bottom:15px;}
 .diag-actions button {background:#2a3444;color:white;border:1px solid #748298;padding:8px 13px;margin-right:9px;font-size:18px;}
 #iptv-diagnostic-text {white-space:pre-wrap;word-wrap:break-word;font-family:monospace;font-size:17px;line-height:1.48;margin:0;}
+
+/* mik_tv v0.8.3: low-cost EPG timeline and DVR controls. */
+.epg-panel {top:10%;bottom:10%;}
+.epg-title {height:54px;line-height:54px;font-size:21px;}
+.epg-timeline-wrap {position:absolute;top:54px;left:15px;right:15px;height:65px;border-bottom:1px solid #354150;}
+.epg-ticks {height:23px;position:relative;overflow:hidden;}
+.epg-tick {position:absolute;top:3px;color:#9eabbf;font-size:13px;white-space:nowrap;}
+.epg-timeline {position:relative;height:36px;overflow:hidden;background:#17212f;}
+.epg-block {position:absolute;top:2px;bottom:2px;background:#485970;border-right:2px solid #151e2b;overflow:hidden;color:#eef1f4;white-space:nowrap;font-size:14px;padding:7px 4px;}
+.epg-block.past {background:#635439;}
+.epg-block.onair {background:#355c46;}
+.epg-block.selected {background:#ffb000;color:#151515;}
+.epg-block-label {display:block;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;}
+.epg-now-line {position:absolute;width:2px;top:0;bottom:0;background:#f5f5f5;}
+.epg-detail {position:absolute;top:119px;left:0;right:0;height:80px;background:#1a2738;padding:8px 27px;overflow:hidden;}
+#epg-selected-title {font-size:17px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#epg-description {font-size:14px;color:#b7c1d0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-top:4px;}
+#epg-availability {font-size:13px;color:#ffce60;padding-top:3px;}
+.epg-list {top:199px;bottom:49px;}
+#epg-range {float:right;color:#ffca65;}
+.dvr-controls {position:absolute;z-index:6;left:24px;right:24px;bottom:192px;height:112px;padding:12px 19px;background:rgba(12,21,31,.95);border:1px solid #927022;color:#f2f2f2;}
+.dvr-heading {font-size:17px;height:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#dvr-title {font-weight:bold;color:#ffc257;}
+#dvr-time {float:right;color:#c2c9d3;font-size:14px;}
+.dvr-track {position:relative;height:9px;margin:5px 0 9px;background:#384454;}
+#dvr-progress {height:9px;background:#ffb000;width:0;}
+.dvr-actions {text-align:center;white-space:nowrap;}
+.dvr-actions button {background:#273444;color:#fff;border:1px solid #6c788b;border-radius:2px;padding:4px 15px;font-size:15px;margin:0 6px;}
+#dvr-live {border-color:#d9434b;color:#ffdddb;}
+.platform-mag250 .dvr-controls {background:#111a27;border-radius:0;}
+@media(max-width:850px), (max-height:620px){
+  .epg-panel {top:4%;bottom:4%;}
+  .epg-title {height:41px;line-height:41px;font-size:16px;}
+  .epg-timeline-wrap {top:41px;height:50px;left:8px;right:8px;}
+  .epg-ticks {height:18px;}.epg-tick {font-size:11px;}.epg-timeline {height:30px;}
+  .epg-block {font-size:11px;padding:6px 2px;}
+  .epg-detail {top:91px;height:65px;padding:5px 12px;}
+  #epg-selected-title {font-size:15px;}
+  #epg-description,#epg-availability {font-size:11px;padding-top:2px;}
+  .epg-list {top:156px;bottom:33px;}
+  .epg-footer {font-size:11px;padding:9px;}
+  .dvr-controls {left:6px;right:6px;bottom:129px;height:93px;padding:8px;}
+  .dvr-heading {font-size:13px;height:18px;}
+  #dvr-time {font-size:11px;}
+  .dvr-track,#dvr-progress {height:6px;}
+  .dvr-actions button {font-size:12px;padding:3px 8px;margin:0 3px;}
+}
