@@ -1,0 +1,28 @@
+{
+  "version": "0.1.1",
+  "target_directory": "/usr/local/nodejs/dev/iptv_front",
+  "database": "iptv_front",
+  "api_port": 4012,
+  "changed_backend_files": [
+    ".env.example",
+    ".gitignore",
+    "README-LOGGER.md",
+    "nginx.example.conf",
+    "package.json",
+    "scripts/bootstrap-admin.ts",
+    "scripts/smoke.sh",
+    "src/app.module.ts",
+    "src/auth/auth.controller.ts",
+    "src/auth/auth.service.ts",
+    "src/auth/authz.ts",
+    "src/auth/guard.ts",
+    "src/auth/users.controller.ts",
+    "src/catalog/catalog.controller.ts",
+    "src/catalog/catalog.service.ts",
+    "src/logger/logger.service.ts",
+    "src/main.ts",
+    "src/providers/providers.controller.ts",
+    "src/providers/providers.service.ts",
+    "test/logger-and-injection.test.cjs"
+  ]
+}

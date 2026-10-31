@@ -1,0 +1,40 @@
+{
+  "name": "iptv-admin-api",
+  "version": "0.4.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node --env-file=.env dist/src/main.js",
+    "start:dev": "npm run build && node --env-file=.env --watch dist/src/main.js",
+    "bootstrap:admin": "node --env-file=.env --import tsx scripts/bootstrap-admin.ts",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "node --test test/*.test.cjs",
+    "watch:tsc": "tsc -p tsconfig.build.json --watch",
+    "test:epg": "node --import tsx --test test/epg-parser.test.ts"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "argon2": "^0.41.1",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "helmet": "^8.0.0",
+    "jose": "^5.10.0",
+    "pg": "^8.13.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "log4js": "^6.9.1",
+    "saxes": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

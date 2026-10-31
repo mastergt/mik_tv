@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>IPTV Portal</title>
+  <link rel="stylesheet" href="css/portal.css?v=0.8.1">
+</head>
+<body>
+  <div id="app" class="theme-modern">
+    <div id="stage">
+      <div class="video-screen" id="video-screen">
+        <video id="video" autoplay playsinline preload="none"></video>
+        <div class="video-placeholder" id="video-placeholder"><div class="tv-mark">▣</div><div class="placeholder-title">IPTV PORTAL</div><div id="video-hint">Выберите канал из списка</div></div>
+        <div id="video-error" class="video-error hidden"></div>
+      </div>
+      <div class="dim-layer" id="dim-layer"></div>
+      <header class="topbar" id="topbar">
+        <div class="brand"><span class="brand-square">▣</span><span id="brand-name">ТЕЛЕВИДЕНИЕ</span></div>
+        <div class="top-right"><span id="provider-name"></span><button type="button" id="account-button" class="top-control">Войти</button><button type="button" id="theme-button" class="top-control" title="Сменить тему">◐</button><span id="clock">--:--</span></div>
+      </header>
+      <aside class="channel-panel" id="channel-panel">
+        <div class="panel-head"><div class="panel-tabs"><button type="button" class="tab active" id="tab-all" data-action="all">Все каналы</button><button type="button" class="tab" id="tab-fav" data-action="favorites">★ Избранное</button></div><div class="panel-subtitle" id="channel-count">Загрузка...</div></div>
+        <div class="channel-list" id="channel-list"></div>
+        <div class="panel-bottom"><button type="button" id="btn-more" class="button-link hidden">Загрузить ещё</button><span id="channels-help">▲▼ — выбор &nbsp; OK — смотреть</span></div>
+      </aside>
+      <section class="info-overlay" id="info-overlay">
+        <div class="now-channel"><span class="channel-num" id="now-num">--</span><span id="now-logo-wrap" class="now-logo-wrap"></span><div class="now-titles"><div id="now-name">Выберите канал</div><div id="now-program" class="program-name">Телепрограмма не загружена</div></div></div>
+        <div class="playback-badge" id="playback-badge">LIVE</div>
+      </section>
+      <section class="epg-panel hidden" id="epg-panel"><div class="epg-title"><span>ПРОГРАММА ПЕРЕДАЧ</span><span id="epg-day"></span></div><div class="epg-list" id="epg-list"></div><div class="epg-footer">▲▼ — выбор &nbsp; OK — архив &nbsp; Назад — закрыть</div></section>
+      <div class="bottom-help" id="bottom-help"><span>OK — каналы</span><span>INFO — EPG</span><span>★ — избранное</span><span>BACK — назад</span></div>
+      <div class="number-popup hidden" id="number-popup"></div>
+      <div class="toast hidden" id="toast"></div>
+      <div class="ticker hidden" id="ticker"><div class="ticker-track" id="ticker-text"></div></div>
+      <div id="busy" class="busy hidden">Подключение...</div>
+    </div>
+    <div class="overlay hidden" id="setup-overlay"><div class="dialog" id="setup-dialog"><h1>Подключение к телевидению</h1><p id="setup-description">Выберите провайдера</p><label for="provider-select">Провайдер</label><select id="provider-select"></select><div class="dialog-actions"><button class="btn primary" id="connect-button" type="button">Подключиться</button></div><div id="setup-error" class="dialog-error hidden"></div></div></div>
+    <div class="overlay hidden" id="login-overlay"><form id="login-form" class="dialog"><h1>Вход абонента</h1><p>Введите логин и пароль от услуги ТВ</p><label for="login-name">Логин</label><input id="login-name" type="text" autocomplete="username" maxlength="150"><label for="login-password">Пароль</label><input id="login-password" type="password" autocomplete="current-password" maxlength="1024"><div class="dialog-actions"><button type="button" id="login-cancel" class="btn secondary">Гостевой режим</button><button type="submit" class="btn primary">Войти</button></div><div class="dialog-error hidden" id="login-error"></div></form></div>
+    <div class="overlay hidden" id="message-overlay"><div class="dialog" id="message-dialog"><h1 id="message-title">Сообщение</h1><img alt="" id="message-image" class="message-image hidden"><p id="message-body" class="message-body"></p><div class="dialog-actions"><button class="btn primary" id="message-close" type="button">ОК</button></div></div></div>
+  </div>
+  <script src="js/config.js?v=0.8.1"></script>
+  <script src="js/util.js?v=0.8.1"></script>
+  <script src="js/api.js?v=0.8.1"></script>
+  <script src="js/platform.js?v=0.8.1"></script>
+  <script src="js/diagnostics.js?v=0.8.1"></script>
+  <script src="js/mag250.js?v=0.8.1"></script>
+  <script src="js/player.js?v=0.8.1"></script>
+  <script src="js/app.js?v=0.8.1"></script>
+</body>
+</html>

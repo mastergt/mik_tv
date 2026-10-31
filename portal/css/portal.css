@@ -1,0 +1,116 @@
+/* IPTV Portal 0.8.0: low-overhead TV interface; based on the existing portal's visual conventions. */
+* { box-sizing:border-box; }
+html,body { width:100%;height:100%;padding:0;margin:0;overflow:hidden;background:#090c10;color:#fff;font-family:Arial,Helvetica,sans-serif;font-size:20px; }
+button,input,select { font:inherit; }
+button { cursor:pointer; }
+button:focus,input:focus,select:focus { outline:3px solid #ffb000; outline-offset:2px; }
+.hidden {display:none !important;}
+#app,#stage { position:relative;width:100%;height:100%;overflow:hidden; }
+.video-screen {position:absolute;top:0;right:0;bottom:0;left:0;background:#020304;overflow:hidden;}
+.video-screen video {position:absolute;width:100%;height:100%;object-fit:contain;background:#05080a;}
+.video-placeholder {position:absolute;top:0;right:0;bottom:0;left:0;text-align:center;padding-top:20vh;background:radial-gradient(ellipse at 55% 45%,#182334 0,#090e16 55%,#050609 100%);}
+.tv-mark {display:inline-block;font-size:74px;color:#ffb000;}
+.placeholder-title {font-size:42px;letter-spacing:6px;font-weight:bold;margin-top:22px;}
+#video-hint {font-size:22px;color:#afb9c6;margin-top:18px;}
+.video-error {position:absolute;left:30%;right:12%;top:36%;padding:28px;text-align:center;color:#fff;background:rgba(75,17,20,.94);border:1px solid #b76254;font-size:23px;z-index:4;}
+.dim-layer {position:absolute;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.28);pointer-events:none;}
+.topbar {position:absolute;top:0;left:0;right:0;height:68px;padding:0 28px;background:linear-gradient(to bottom,rgba(5,9,14,.95),rgba(5,9,14,.6));z-index:8;line-height:68px;}
+.brand {display:inline-block;font-weight:bold;font-size:26px;letter-spacing:1px;white-space:nowrap;}
+.brand-square {color:#ffb000;font-size:32px;vertical-align:-2px;margin-right:8px;}
+.top-right {float:right;white-space:nowrap;}
+.top-right span {margin-left:22px;color:#e9eef6;}
+.top-control {border:1px solid #566171;background:rgba(39,48,60,.72);color:white;border-radius:5px;margin-left:18px;padding:7px 13px;font-size:17px;line-height:24px;}
+.top-control:hover,.top-control:focus {border-color:#ffb000;background:#4b3c1b;}
+#clock {font-size:26px;font-weight:bold;letter-spacing:1px;}
+.channel-panel {position:absolute;z-index:7;top:69px;bottom:82px;left:20px;width:430px;background:rgba(13,18,26,.94);border:1px solid rgba(147,160,180,.34);box-shadow:0 10px 30px rgba(0,0,0,.6);border-radius:7px;overflow:hidden;}
+.panel-head {height:110px;border-bottom:1px solid #343f4f;padding:16px 16px 9px;}
+.panel-tabs {height:42px;white-space:nowrap;}
+.tab {display:inline-block;background:transparent;color:#a9b2c1;border:none;border-bottom:3px solid transparent;padding:7px 11px 12px;margin-right:12px;font-size:19px;font-weight:bold;}
+.tab.active {color:#fff;border-color:#ffb000;}
+.panel-subtitle {padding:9px 12px;color:#91a0b1;font-size:16px;}
+.channel-list {position:absolute;top:110px;bottom:54px;left:0;right:0;overflow-x:hidden;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#68738a transparent;}
+.channel-row {height:64px;line-height:64px;padding:0 13px 0 12px;border-bottom:1px solid rgba(183,195,210,.1);white-space:nowrap;overflow:hidden;cursor:pointer;position:relative;}
+.channel-row.selected {background:#f0a900;color:#111827;font-weight:bold;}
+.channel-row.playing:not(.selected) {background:rgba(138,103,18,.25);}
+.row-number {display:inline-block;width:48px;color:#a7b3c1;font-size:20px;vertical-align:middle;}
+.selected .row-number {color:#282c36;}
+.row-logo {display:inline-block;width:48px;height:44px;vertical-align:middle;text-align:center;line-height:44px;}
+.row-logo img {max-width:42px;max-height:38px;vertical-align:middle;}
+.logo-placeholder {font-size:26px;color:#607187;}
+.selected .logo-placeholder {color:#43454b;}
+.row-name {display:inline-block;max-width:260px;margin-left:10px;text-overflow:ellipsis;overflow:hidden;vertical-align:middle;line-height:26px;font-size:20px;}
+.favorite-mark {position:absolute;right:14px;font-size:19px;color:#ffbd24;}
+.selected .favorite-mark {color:#322211;}
+.panel-bottom {position:absolute;bottom:0;left:0;right:0;height:54px;border-top:1px solid #343f4f;padding:14px 15px;color:#a7b3c1;font-size:15px;}
+.button-link {border:0;background:#d39919;color:#13171d;border-radius:4px;padding:6px 11px;font-size:16px;float:right;margin-top:-6px;}
+.empty-list {padding:25px 20px;line-height:1.5;color:#a7b3c1;font-size:19px;}
+.info-overlay {position:absolute;z-index:4;left:30px;bottom:76px;right:30px;min-height:108px;background:linear-gradient(90deg,rgba(13,20,31,.94),rgba(13,20,31,.67));border-left:4px solid #ffb000;padding:16px 24px;}
+.now-channel {display:inline-block;width:82%;white-space:nowrap;}
+.channel-num {display:inline-block;vertical-align:middle;font-size:41px;font-weight:bold;color:#ffb000;width:80px;}
+.now-logo-wrap {display:inline-block;width:78px;height:68px;text-align:center;vertical-align:middle;line-height:68px;margin-right:14px;}
+.now-logo-wrap img {max-width:72px;max-height:64px;vertical-align:middle;}
+.now-titles {display:inline-block;vertical-align:middle;width:65%;overflow:hidden;text-overflow:ellipsis;}
+#now-name {font-size:29px;font-weight:bold;overflow:hidden;text-overflow:ellipsis;}
+.program-name {font-size:19px;color:#b4c0d1;padding-top:8px;overflow:hidden;text-overflow:ellipsis;}
+.playback-badge {position:absolute;right:23px;top:30px;background:#d52d35;border-radius:4px;font-size:20px;font-weight:bold;padding:8px 16px;}
+.epg-panel {position:absolute;z-index:10;left:7%;right:7%;top:18%;bottom:18%;border:1px solid #5a6675;border-radius:7px;background:rgba(15,22,33,.97);box-shadow:0 12px 40px #000;overflow:hidden;}
+.epg-title {height:66px;line-height:66px;padding:0 28px;border-bottom:1px solid #3e4855;color:#f0f3fa;font-size:23px;font-weight:bold;}
+#epg-day {float:right;color:#a1aebc;font-size:18px;font-weight:normal;}
+.epg-list {position:absolute;top:66px;bottom:49px;left:0;right:0;overflow-y:auto;}
+.epg-row {height:58px;line-height:58px;padding:0 29px;border-bottom:1px solid #2b3543;white-space:nowrap;overflow:hidden;cursor:pointer;}
+.epg-row.current {border-left:5px solid #ffb000;padding-left:24px;background:#293343;}
+.epg-row.selected {background:#f0a900;color:#111827;font-weight:bold;}
+.epg-time {display:inline-block;width:112px;color:#acb9c9;font-size:19px;}
+.epg-row.selected .epg-time {color:#2d2b25;}
+.epg-name {display:inline-block;max-width:75%;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;font-size:20px;}
+.epg-footer {position:absolute;bottom:0;left:0;right:0;height:49px;padding:13px 29px;border-top:1px solid #3b4756;color:#aab6c5;font-size:17px;}
+.bottom-help {position:absolute;left:0;right:0;bottom:0;height:62px;line-height:62px;z-index:5;padding:0 32px;background:rgba(5,9,14,.85);white-space:nowrap;color:#c4cad3;font-size:17px;}
+.bottom-help span {margin-right:48px;}
+.toast {position:absolute;z-index:45;left:50%;bottom:175px;transform:translateX(-50%);padding:17px 28px;border-radius:7px;background:#202a39;border:1px solid #ffb000;max-width:82%;text-align:center;font-size:19px;box-shadow:0 7px 30px #000;}
+.number-popup {position:absolute;z-index:40;top:110px;right:85px;border-radius:6px;background:rgba(0,0,0,.84);padding:16px 38px;font-size:42px;color:#ffb000;}
+.busy {position:absolute;z-index:50;top:72px;left:50%;transform:translateX(-50%);background:#e4a01b;color:#161c23;padding:12px 26px;border-radius:3px;font-size:20px;font-weight:bold;}
+.overlay {position:absolute;z-index:90;inset:0;background:rgba(2,4,8,.88);text-align:center;padding-top:11vh;}
+.dialog {width:560px;max-width:90%;margin:0 auto;padding:35px 42px;text-align:left;border:1px solid #536071;border-radius:9px;background:#192231;box-shadow:0 15px 60px rgba(0,0,0,.6);}
+.dialog h1 {font-size:29px;margin:0 0 20px;color:#fff;}
+.dialog p {font-size:18px;line-height:1.5;color:#c4cbd7;margin:0 0 19px;}
+.dialog label {display:block;color:#c3cedb;font-size:18px;margin:15px 0 9px;}
+.dialog input,.dialog select {display:block;width:100%;height:52px;padding:9px 14px;color:#fff;background:#101824;border:1px solid #617186;border-radius:5px;font-size:22px;}
+.dialog select option {background:#101824;color:#fff;}
+.dialog-actions {text-align:right;margin-top:27px;}
+.btn {border:1px solid #8492a1;padding:13px 21px;border-radius:5px;font-weight:bold;font-size:18px;margin-left:9px;}
+.btn.primary {border-color:#efab18;background:#f3af20;color:#15202b;}
+.btn.secondary {background:#343f51;color:white;}
+.dialog-error {color:#ffb3ac;background:#5c2225;border:1px solid #b76560;padding:12px 15px;margin-top:18px;font-size:17px;}
+.message-body {white-space:pre-wrap;word-break:break-word;max-height:40vh;overflow-y:auto;}
+.message-image {max-width:100%;max-height:180px;object-fit:contain;margin-bottom:12px;}
+.ticker {position:absolute;left:0;right:0;bottom:62px;height:58px;line-height:58px;z-index:55;overflow:hidden;background:rgba(10,16,23,.94);color:#ffdf92;font-size:25px;white-space:nowrap;}
+.ticker-track {display:inline-block;padding-left:100%;animation:tickerMove 17s linear infinite;}
+@keyframes tickerMove{0%{transform:translateX(0)}100%{transform:translateX(-100%)}}
+.theme-classic .channel-panel,.theme-classic .epg-panel {border-radius:0;background:rgba(12,12,12,.97);}
+.theme-classic .channel-row.selected,.theme-classic .epg-row.selected {background:#cd8922;color:#fff;}
+.theme-classic .topbar {background:rgba(12,12,12,.88);}
+.theme-classic .info-overlay {border-left-color:#c9881e;}
+@media(max-width:850px), (max-height:620px){
+  html,body{font-size:16px;}
+  .topbar{height:49px;line-height:49px;padding:0 15px;}.brand{font-size:19px;}.brand-square{font-size:22px;}
+  .top-right span{margin-left:9px;font-size:15px;}.top-control{font-size:14px;padding:2px 7px;margin-left:7px;}
+  .channel-panel{top:50px;bottom:45px;left:5px;width:330px;}.panel-head{height:78px;padding:8px;}.tab{font-size:15px;margin-right:2px;padding:4px 9px 7px;}.panel-subtitle{padding:5px 9px;font-size:13px;}
+  .channel-list{top:78px;bottom:38px;}.channel-row{height:46px;line-height:46px;padding:0 8px;}.row-number{width:35px;font-size:15px;}.row-logo{width:36px;height:32px;line-height:32px;}.row-logo img{max-width:32px;max-height:29px;}.row-name{font-size:16px;max-width:205px;margin-left:4px;}.panel-bottom{height:38px;padding:10px;font-size:11px;}
+  .bottom-help{height:40px;line-height:40px;font-size:12px;padding:0 15px;}.bottom-help span{margin-right:20px;}
+  .info-overlay{bottom:43px;min-height:80px;padding:9px 13px;left:8px;right:8px;}.channel-num{font-size:28px;width:48px;}.now-logo-wrap{width:51px;height:50px;line-height:50px;}.now-logo-wrap img{max-height:46px;max-width:47px;}.now-titles{width:65%;}#now-name{font-size:19px;}.program-name{font-size:14px;}.playback-badge{font-size:14px;padding:5px 8px;top:20px;right:10px;}
+  .epg-panel{top:12%;bottom:12%;left:5%;right:5%;}.epg-title{height:43px;line-height:43px;font-size:17px;}.epg-list{top:43px;bottom:33px;}.epg-row{height:39px;line-height:39px;}.epg-time{font-size:15px;width:80px;}.epg-name{font-size:16px;}.epg-footer{height:33px;font-size:12px;padding:9px;}
+  .dialog{padding:21px 27px;}.dialog h1{font-size:23px;}.dialog input,.dialog select{height:42px;font-size:18px;}.btn{font-size:16px;padding:9px 14px;}
+}
+
+/* 0.8.1: Lightweight MAG graphics with chromakey native video window. */
+.platform-mag250 .video-screen,.platform-mag250 .video-screen video {background:#000008;}
+.platform-mag250 .video-screen video {display:none;}
+.platform-mag250 .video-placeholder {background:#111821;}
+.platform-mag250 .channel-panel,.platform-mag250 .epg-panel,.platform-mag250 .info-overlay,.platform-mag250 .toast {box-shadow:none;border-radius:0;}
+.platform-mag250 .topbar,.platform-mag250 .info-overlay {background:rgba(10,15,24,.94);}
+.platform-mag250 .dim-layer {background:transparent;}
+.diagnostics {position:absolute;z-index:150;top:5%;bottom:5%;left:5%;right:5%;background:#0b1018;border:2px solid #ffb000;color:#e3ecf4;padding:18px 22px;overflow:auto;font-family:Arial,sans-serif;}
+.diag-title {font-size:24px;font-weight:bold;color:#ffb000;margin-bottom:14px;}
+.diag-actions {margin-bottom:15px;}
+.diag-actions button {background:#2a3444;color:white;border:1px solid #748298;padding:8px 13px;margin-right:9px;font-size:18px;}
+#iptv-diagnostic-text {white-space:pre-wrap;word-wrap:break-word;font-family:monospace;font-size:17px;line-height:1.48;margin:0;}

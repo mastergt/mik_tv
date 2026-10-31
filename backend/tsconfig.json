@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "module": "CommonJS", "target": "ES2022", "lib": ["ES2022", "DOM"],
+    "moduleResolution": "node", "outDir": "dist", "rootDir": ".",
+    "strict": true, "skipLibCheck": true, "esModuleInterop": true,
+    "experimentalDecorators": true, "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false, "noImplicitOverride": true,
+    "resolveJsonModule": true, "sourceMap": true
+  },
+  "include": ["src/**/*.ts", "scripts/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

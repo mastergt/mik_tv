@@ -1,0 +1,7 @@
+Bundled library: hls.js v1.5.1 (video-dev/hls.js)
+Origin: existing portal.zip provided by the user.
+License: Apache License, Version 2.0.
+Project: https://github.com/video-dev/hls.js
+Copyright: respective hls.js authors and contributors.
+See Apache-2.0.txt for license terms.
+This notice does not grant rights to television channel content, logos, codecs, or other media.
