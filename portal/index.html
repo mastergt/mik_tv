@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <title>IPTV Portal</title>
-  <link rel="stylesheet" href="css/portal.css?v=0.8.1">
+  <link rel="stylesheet" href="css/portal.css?v=0.8.2">
 </head>
 <body>
   <div id="app" class="theme-modern">
@@ -37,16 +37,16 @@
       <div id="busy" class="busy hidden">Подключение...</div>
     </div>
     <div class="overlay hidden" id="setup-overlay"><div class="dialog" id="setup-dialog"><h1>Подключение к телевидению</h1><p id="setup-description">Выберите провайдера</p><label for="provider-select">Провайдер</label><select id="provider-select"></select><div class="dialog-actions"><button class="btn primary" id="connect-button" type="button">Подключиться</button></div><div id="setup-error" class="dialog-error hidden"></div></div></div>
-    <div class="overlay hidden" id="login-overlay"><form id="login-form" class="dialog"><h1>Вход абонента</h1><p>Введите логин и пароль от услуги ТВ</p><label for="login-name">Логин</label><input id="login-name" type="text" autocomplete="username" maxlength="150"><label for="login-password">Пароль</label><input id="login-password" type="password" autocomplete="current-password" maxlength="1024"><div class="dialog-actions"><button type="button" id="login-cancel" class="btn secondary">Гостевой режим</button><button type="submit" class="btn primary">Войти</button></div><div class="dialog-error hidden" id="login-error"></div></form></div>
+    <div class="overlay hidden" id="login-overlay"><form id="login-form" class="dialog"><h1>Вход абонента</h1><p>Введите логин и пароль от услуги ТВ</p><label for="login-name">Логин</label><input id="login-name" type="text" autocomplete="username" maxlength="150"><label for="login-password">Пароль</label><input id="login-password" type="password" autocomplete="current-password" maxlength="1024"><div class="dialog-actions"><button type="button" id="login-cancel" class="btn secondary">Гостевой режим</button><button type="submit" id="login-submit" class="btn primary">Войти</button></div><div class="dialog-error hidden" id="login-error"></div></form></div>
     <div class="overlay hidden" id="message-overlay"><div class="dialog" id="message-dialog"><h1 id="message-title">Сообщение</h1><img alt="" id="message-image" class="message-image hidden"><p id="message-body" class="message-body"></p><div class="dialog-actions"><button class="btn primary" id="message-close" type="button">ОК</button></div></div></div>
   </div>
-  <script src="js/config.js?v=0.8.1"></script>
-  <script src="js/util.js?v=0.8.1"></script>
-  <script src="js/api.js?v=0.8.1"></script>
-  <script src="js/platform.js?v=0.8.1"></script>
-  <script src="js/diagnostics.js?v=0.8.1"></script>
-  <script src="js/mag250.js?v=0.8.1"></script>
-  <script src="js/player.js?v=0.8.1"></script>
-  <script src="js/app.js?v=0.8.1"></script>
+  <script src="js/config.js?v=0.8.2"></script>
+  <script src="js/util.js?v=0.8.2"></script>
+  <script src="js/api.js?v=0.8.2"></script>
+  <script src="js/platform.js?v=0.8.2"></script>
+  <script src="js/diagnostics.js?v=0.8.2"></script>
+  <script src="js/mag250.js?v=0.8.2"></script>
+  <script src="js/player.js?v=0.8.2"></script>
+  <script src="js/app.js?v=0.8.2"></script>
 </body>
 </html>
