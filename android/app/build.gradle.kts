@@ -1,3 +1,10 @@
+val releaseStorePath = System.getenv("MIKTV_RELEASE_KEYSTORE_PATH")
+val releaseStorePassword = System.getenv("MIKTV_RELEASE_STORE_PASSWORD")
+val releaseAlias = System.getenv("MIKTV_RELEASE_KEY_ALIAS")
+val releaseKeyPassword = System.getenv("MIKTV_RELEASE_KEY_PASSWORD")
+val canSignRelease = listOf(releaseStorePath, releaseStorePassword, releaseAlias, releaseKeyPassword)
+    .all { !it.isNullOrBlank() }
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -11,13 +18,25 @@ android {
         applicationId = "ru.miktv.android"
         minSdk = 23
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
+    }
+
+    signingConfigs {
+        if (canSignRelease) {
+            create("releaseCi") {
+                storeFile = file(releaseStorePath!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (canSignRelease) signingConfig = signingConfigs.getByName("releaseCi")
         }
     }
 

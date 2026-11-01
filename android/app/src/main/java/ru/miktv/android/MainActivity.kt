@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.*
 import android.text.Editable
 import android.text.TextWatcher
@@ -43,6 +44,11 @@ class MainActivity : Activity() {
     private var hasMore = false
     private var loading = false
     private var epoch = 0
+    private val logos = ChannelLogos()
+    private data class ChannelRow(val logo: ImageView, val title: TextView, val subtitle: TextView)
+    private var guidePreview: TextView? = null
+    private var previewRequest = 0
+    private var categoryChips: LinearLayout? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -172,7 +178,7 @@ class MainActivity : Activity() {
                 .put("manufacturer", Build.MANUFACTURER.take(100))
                 .put("model", Build.MODEL.take(100))
                 .put("os_version", Build.VERSION.RELEASE.take(80))
-                .put("app_version", "0.1.0")
+                .put("app_version", "0.2.0")
                 .put("device_name", "mik_tv Android")
                 .apply { session.deviceSecret()?.let { put("device_secret", it) } }
         } catch (e: Exception) {
@@ -216,8 +222,25 @@ class MainActivity : Activity() {
         toolbar.addView(button("★") { favoritesOnly = !favoritesOnly; redraw() })
         toolbar.addView(button("EPG") { currentSelection()?.let(::showEpg) ?: notify("Выберите канал") })
         page.addView(toolbar)
-        categorySpinner = Spinner(this)
-        page.addView(categorySpinner)
+        guidePreview = label("Выберите канал — здесь будет текущая и следующая передача", if (session.isTv()) 17f else 13f).apply {
+            setBackgroundColor(Color.rgb(28, 43, 61))
+            maxLines = 3
+        }
+        page.addView(guidePreview)
+        categoryChips = null
+        categorySpinner = null
+        if (session.isTv()) {
+            categorySpinner = Spinner(this)
+            page.addView(categorySpinner)
+        } else {
+            val horizontal = HorizontalScrollView(this).apply {
+                isHorizontalScrollBarEnabled = false
+                setFillViewport(false)
+            }
+            categoryChips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            horizontal.addView(categoryChips)
+            page.addView(horizontal)
+        }
         val body = LinearLayout(this).apply {
             orientation = if (session.isTv()) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
         }
@@ -243,6 +266,12 @@ class MainActivity : Activity() {
         status = label("Загрузка каналов…", 13f)
         page.addView(status)
         channelList!!.setOnItemClickListener { _, _, pos, _ -> adapter?.getChannel(pos)?.let(::play) }
+        channelList!!.setOnItemSelectedListener(object : AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, pos: Int, id: Long) {
+                adapter?.getChannel(pos)?.let(::requestGuidePreview)
+            }
+        })
         channelList!!.setOnItemLongClickListener { _, _, pos, _ ->
             adapter?.getChannel(pos)?.let(::favorite)
             true
@@ -255,7 +284,7 @@ class MainActivity : Activity() {
                 redraw()
             }
         })
-        categorySpinner!!.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+        categorySpinner?.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, pos: Int, id: Long) {
                 category = categorySpinner?.selectedItem?.toString() ?: "Все"
@@ -298,6 +327,11 @@ class MainActivity : Activity() {
             loadMore?.isEnabled = hasMore
             updateCategories()
             redraw()
+            if (offset <= 200) {
+                session.channels.firstOrNull { it.id == session.lastChannel() }
+                    ?.let { channelList?.setSelection(adapter?.positionOf(it.id) ?: 0) }
+                currentSelection()?.let(::requestGuidePreview)
+            }
             status.text = session.channels.size.toString() + " каналов загружено" +
                 if (hasMore) " · Ещё страницы" else ""
         }
@@ -305,11 +339,29 @@ class MainActivity : Activity() {
 
     private fun updateCategories() {
         val names = listOf("Все") + session.channels.flatMap { it.genres }.distinct().sorted()
-        val spinner = categorySpinner ?: return
-        val items = ArrayAdapter(this, android.R.layout.simple_spinner_item, names)
-        items.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        spinner.adapter = items
-        spinner.setSelection(names.indexOf(category).coerceAtLeast(0))
+        if (session.isTv()) {
+            val spinner = categorySpinner ?: return
+            val items = ArrayAdapter(this, android.R.layout.simple_spinner_item, names)
+            items.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            spinner.adapter = items
+            spinner.setSelection(names.indexOf(category).coerceAtLeast(0))
+        } else {
+            val chips = categoryChips ?: return
+            chips.removeAllViews()
+            names.forEach { name ->
+                val chip = button(name) {
+                    category = name
+                    updateCategories()
+                    redraw()
+                }
+                chip.textSize = 13f
+                chip.setTextColor(if (name == category) Color.rgb(18, 29, 43) else white)
+                chip.background = shape(if (name == category) gold else Color.rgb(36, 51, 72))
+                val lp = LinearLayout.LayoutParams(-2, dp(43))
+                lp.setMargins(dp(4), dp(2), dp(4), dp(5))
+                chips.addView(chip, lp)
+            }
+        }
     }
 
     private fun loadFavorites() {
@@ -325,13 +377,40 @@ class MainActivity : Activity() {
 
     private fun redraw() {
         if (screen != "catalog") return
+        val previousId = currentSelection()?.id
         adapter?.update(session.channels.filter {
             (!favoritesOnly || session.favorites.contains(it.id)) &&
                 (category == "Все" || it.genres.contains(category)) &&
                 (search.isEmpty() || (it.number + " " + it.name + " " + it.genres.joinToString(" "))
                     .lowercase(Locale.ROOT).contains(search))
         })
-        if ((adapter?.count ?: 0) > 0) channelList?.setSelection(0)
+        if ((adapter?.count ?: 0) > 0) {
+            val pos = previousId?.let { adapter?.positionOf(it) } ?: -1
+            channelList?.setSelection(if (pos >= 0) pos else 0)
+        } else {
+            guidePreview?.text = "В этой категории нет загруженных каналов"
+        }
+    }
+
+    private fun requestGuidePreview(channel: Channel) {
+        val requestId = ++previewRequest
+        val activeEpoch = epoch
+        guidePreview?.text = channel.name + " · загружаем телепрограмму…"
+        val now = System.currentTimeMillis()
+        val url = "/client/streams/" + channel.id + "/epg?from=" + enc(iso(now - 3600000L)) +
+            "&to=" + enc(iso(now + 12 * 3600000L))
+        api.get(session.baseUrl, session.token, url) { response, error ->
+            if (screen != "catalog" || requestId != previewRequest || activeEpoch != epoch) return@get
+            if (error != null) {
+                guidePreview?.text = channel.name + " · EPG недоступна"
+                return@get
+            }
+            val events = EpgGuide.programmes(response as? JSONArray ?: JSONArray())
+            val (current, next) = EpgGuide.nowNext(events, System.currentTimeMillis())
+            guidePreview?.text = channel.name + "\n" +
+                "Сейчас: " + (current?.title ?: "Нет данных") +
+                "\nДалее: " + (next?.title ?: "Нет данных")
+        }
     }
 
     private fun currentSelection(): Channel? {
@@ -365,25 +444,39 @@ class MainActivity : Activity() {
 
     private fun showEpg(channel: Channel) {
         val now = System.currentTimeMillis()
-        val route = "/client/streams/" + channel.id + "/epg?from=" + enc(iso(now - 86400000L)) +
-            "&to=" + enc(iso(now + 86400000L))
+        val route = "/client/streams/" + channel.id + "/epg?from=" +
+            enc(EpgGuide.iso(now - 48 * 3600000L)) + "&to=" + enc(EpgGuide.iso(now + 24 * 3600000L))
         status.text = "Загрузка EPG…"
         api.get(session.baseUrl, session.token, route) { response, error ->
+            if (screen != "catalog") return@get
             val data = response as? JSONArray
             if (error != null || data == null) { notify(error?.message ?: "Ошибка EPG"); return@get }
-            if (data.length() == 0) { notify("Нет телепрограммы"); return@get }
-            val labels = (0 until data.length()).map {
-                val p = data.optJSONObject(it) ?: JSONObject()
-                p.optString("starts_at").take(16).replace('T', ' ') + "  " + p.optString("title")
+            val events = EpgGuide.programmes(data)
+            if (events.isEmpty()) { notify("Нет телепрограммы"); return@get }
+            val currentTime = System.currentTimeMillis()
+            val labels = events.map { p ->
+                val marker = if (p.isOnAir(currentTime)) "▶ " else if (p.isFuture(currentTime)) "  " else "↶ "
+                marker + EpgGuide.day(p.startMs) + " " + EpgGuide.time(p.startMs) + "  " + p.title
             }.toTypedArray()
-            AlertDialog.Builder(this).setTitle("EPG · " + channel.name).setItems(labels) { _, index ->
-                val event = data.optJSONObject(index) ?: return@setItems
-                val begin = parseIso(event.optString("starts_at"))
-                val finish = parseIso(event.optString("ends_at"))
-                val end = minOf(finish, System.currentTimeMillis() - 5000, begin + 12 * 3600000L)
-                if (begin <= 0 || end - begin < 15000) notify("Архив передачи недоступен")
-                else play(channel, iso(begin), iso(end))
-            }.setNegativeButton("Назад", null).show()
+            val active = events.indexOfFirst { it.isOnAir(currentTime) }.coerceAtLeast(0)
+            val guideDialog = AlertDialog.Builder(this).setTitle("Программа · " + channel.name)
+                .setSingleChoiceItems(labels, active) { dialog, index ->
+                    dialog.dismiss()
+                    val selected = events[index]
+                    val archive = EpgGuide.archiveBounds(selected, System.currentTimeMillis())
+                    val detail = selected.title + "\n" +
+                        EpgGuide.day(selected.startMs) + " " + EpgGuide.time(selected.startMs) +
+                        "–" + EpgGuide.time(selected.endMs) + "\n\n" +
+                        selected.description.take(600)
+                    val builder = AlertDialog.Builder(this).setTitle("Передача").setMessage(detail)
+                        .setNegativeButton("Закрыть", null)
+                        .setNeutralButton("▶ LIVE") { _, _ -> play(channel) }
+                    if (archive != null) builder.setPositiveButton("↶ Архив") { _, _ ->
+                        play(channel, EpgGuide.iso(archive.first), EpgGuide.iso(archive.second))
+                    }
+                    builder.show()
+                }.setNegativeButton("Закрыть", null).create()
+            guideDialog.show()
         }
     }
 
@@ -445,18 +538,57 @@ class MainActivity : Activity() {
     private inner class ChannelAdapter : BaseAdapter() {
         private var items = listOf<Channel>()
         fun update(value: List<Channel>) { items = value; notifyDataSetChanged() }
+        fun positionOf(id: String) = items.indexOfFirst { it.id == id }
         fun getChannel(index: Int) = items.getOrNull(index)
         override fun getCount() = items.size
         override fun getItem(position: Int): Any = items[position]
         override fun getItemId(position: Int) = position.toLong()
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-            val view = (convertView as? TextView) ?: label("", if (session.isTv()) 22f else 17f).apply {
-                minHeight = dp(if (session.isTv()) 66 else 54)
-                background = focusShape()
+            val view: LinearLayout
+            val holder: ChannelRow
+            if (convertView is LinearLayout && convertView.tag is ChannelRow) {
+                view = convertView
+                holder = view.tag as ChannelRow
+            } else {
+                view = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    setPadding(dp(10), dp(5), dp(10), dp(5))
+                    minimumHeight = dp(if (session.isTv()) 76 else 67)
+                    background = focusShape()
+                }
+                val icon = ImageView(this@MainActivity).apply {
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    setBackgroundColor(Color.rgb(245, 246, 249))
+                }
+                view.addView(icon, LinearLayout.LayoutParams(dp(if (session.isTv()) 72 else 58),
+                    dp(if (session.isTv()) 54 else 48)))
+                val texts = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(12), 0, dp(5), 0)
+                }
+                val main = label("", if (session.isTv()) 22f else 17f).apply {
+                    setPadding(0, 0, 0, 0)
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                }
+                val sub = label("", if (session.isTv()) 15f else 13f).apply {
+                    setPadding(0, dp(3), 0, 0)
+                    setTextColor(Color.rgb(177, 195, 215))
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                }
+                texts.addView(main)
+                texts.addView(sub)
+                view.addView(texts, LinearLayout.LayoutParams(0, -2, 1f))
+                holder = ChannelRow(icon, main, sub)
+                view.tag = holder
             }
             val channel = items[position]
-            view.text = channel.number + "    " + channel.name +
-                if (session.favorites.contains(channel.id)) "   ★" else ""
+            holder.title.text = channel.number + "  " + channel.name +
+                if (session.favorites.contains(channel.id)) " ★" else ""
+            holder.subtitle.text = channel.genres.joinToString(" · ").ifBlank { "Телеканал" }
+            logos.show(holder.logo, session.baseUrl, channel.logo)
             return view
         }
     }

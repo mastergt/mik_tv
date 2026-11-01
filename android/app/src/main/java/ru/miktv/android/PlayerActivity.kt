@@ -3,6 +3,10 @@ package ru.miktv.android
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.graphics.Color
+import android.content.Context
+import android.media.AudioManager
+import android.view.MotionEvent
+import android.widget.Toast
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -36,6 +40,13 @@ class PlayerActivity : Activity() {
     private lateinit var playerView: PlayerView
     private lateinit var title: TextView
     private lateinit var state: TextView
+    private lateinit var nowNext: TextView
+    private lateinit var infoPanel: LinearLayout
+    private var infoHide: Runnable? = null
+    private var touchStartX = 0f
+    private var touchStartY = 0f
+    private val touchThreshold by lazy { 65f * resources.displayMetrics.density }
+
     private var streamId = ""
     private var dvrStart: String? = null
     private var dvrEnd: String? = null
@@ -63,7 +74,7 @@ class PlayerActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (session.isTv()) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN or
             View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
@@ -94,13 +105,33 @@ class PlayerActivity : Activity() {
             setTextColor(Color.WHITE)
         }
         overlay.addView(title)
+        nowNext = TextView(this).apply {
+            setTextColor(Color.rgb(220, 230, 244))
+            textSize = if (session.isTv()) 18f else 14f
+            maxLines = 2
+        }
+        overlay.addView(nowNext)
         overlay.addView(state)
         val buttons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val back = Button(this).apply { text = "⟵ Каналы"; isAllCaps = false; setOnClickListener { finish() } }
-        val live = Button(this).apply { text = "● LIVE"; isAllCaps = false; setOnClickListener { dvrStart = null; dvrEnd = null; begin() } }
+        val live = Button(this).apply {
+            text = "● LIVE"; isAllCaps = false
+            setOnClickListener { dvrStart = null; dvrEnd = null; recoveryAttempt = 0; begin() }
+        }
+        val retryButton = Button(this).apply {
+            text = "↻ Повторить"; isAllCaps = false
+            setOnClickListener { recoveryAttempt = 0; begin() }
+        }
+        val guideButton = Button(this).apply {
+            text = "EPG"; isAllCaps = false
+            setOnClickListener { showGuide() }
+        }
         buttons.addView(back)
-        if (dvrStart != null) buttons.addView(live)
+        buttons.addView(guideButton)
+        buttons.addView(retryButton)
+        buttons.addView(live)
         overlay.addView(buttons)
+        infoPanel = overlay
         root.addView(overlay, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
         setContentView(root)
 
@@ -113,6 +144,8 @@ class PlayerActivity : Activity() {
                 if (playbackState == Player.STATE_READY) {
                     state.text = if (dvrStart == null) "LIVE · воспроизведение" else "АРХИВ · воспроизведение"
                     lastReadyAt = System.currentTimeMillis()
+                    session.saveLastChannel(streamId)
+                    showInfo(6500L)
                 }
                 if (playbackState == Player.STATE_ENDED && dvrStart == null) trySource("Поток завершён")
             }
@@ -129,8 +162,10 @@ class PlayerActivity : Activity() {
         sources = emptyList()
         releaseLease()
         player.stop()
+        showInfo(0L)
         val channel = session.channels.find { it.id == streamId }
         title.text = (channel?.number ?: "") + "  " + (channel?.name ?: "Канал " + streamId)
+        loadGuidePreview(epoch)
         state.text = "Запрос доступа к видеопотоку…"
         api.post(session.baseUrl, session.token, "/client/playback/start", JSONObject().put("stream_id", streamId)) { response, error ->
             if (!active || generation != epoch) return@post
@@ -177,6 +212,7 @@ class PlayerActivity : Activity() {
         }
         val source = sources[sourceIndex]
         state.text = "Подключение: источник " + (sourceIndex + 1) + " / " + sources.size
+        showInfo(0L)
         val item = MediaItem.Builder().setUri(source.url).apply {
             if (source.protocol == "hls" || source.url.contains(".m3u8", true))
                 setMimeType(MimeTypes.APPLICATION_M3U8)
@@ -193,11 +229,13 @@ class PlayerActivity : Activity() {
         if (!active || dvrStart != null) return
         cancelRetry()
         if (recoveryAttempt >= 3) {
-            state.text = "Не удалось восстановить эфир: " + problem + ". Нажмите LIVE для повтора."
+            state.text = "Не удалось восстановить эфир: " + problem + ". Нажмите «Повторить»."
+            showInfo(0L)
             return
         }
         val wait = listOf(1500L, 3000L, 6000L)[recoveryAttempt++]
         state.text = "Поток недоступен. Повтор " + recoveryAttempt + "/3 через " + wait / 1000 + " сек"
+        showInfo(0L)
         val expected = generation
         val task = Runnable { if (active && expected == generation) begin() }
         retry = task
@@ -258,6 +296,118 @@ class PlayerActivity : Activity() {
         api.post(session.baseUrl, session.token, "/client/playback/stop", JSONObject().put("lease_token", key)) { _, _ -> }
     }
 
+    private fun showInfo(timeoutMs: Long = 6000L) {
+        infoHide?.let(handler::removeCallbacks)
+        infoPanel.visibility = View.VISIBLE
+        if (timeoutMs > 0L) {
+            val hide = Runnable { if (active) infoPanel.visibility = View.GONE }
+            infoHide = hide
+            handler.postDelayed(hide, timeoutMs)
+        }
+    }
+
+    private fun loadGuidePreview(expectedGeneration: Int) {
+        nowNext.text = "Телепрограмма: загрузка…"
+        val now = System.currentTimeMillis()
+        val url = "/client/streams/" + streamId + "/epg?from=" +
+            MainActivity.enc(EpgGuide.iso(now - 3600000L)) +
+            "&to=" + MainActivity.enc(EpgGuide.iso(now + 12 * 3600000L))
+        api.get(session.baseUrl, session.token, url) { response, error ->
+            if (!active || generation != expectedGeneration) return@get
+            if (error != null) { nowNext.text = "EPG недоступна"; return@get }
+            val (current, next) = EpgGuide.nowNext(
+                EpgGuide.programmes(response as? JSONArray ?: JSONArray()), System.currentTimeMillis()
+            )
+            nowNext.text = "Сейчас: " + (current?.title ?: "нет данных") +
+                "\nДалее: " + (next?.title ?: "нет данных")
+        }
+    }
+
+    private fun showGuide() {
+        if (!active) return
+        val activeStream = streamId
+        val expected = generation
+        val now = System.currentTimeMillis()
+        val route = "/client/streams/" + activeStream + "/epg?from=" +
+            MainActivity.enc(EpgGuide.iso(now - 48 * 3600000L)) + "&to=" +
+            MainActivity.enc(EpgGuide.iso(now + 24 * 3600000L))
+        api.get(session.baseUrl, session.token, route) { response, error ->
+            if (!active || generation != expected || activeStream != streamId) return@get
+            if (error != null) { Toast.makeText(this, error.message, Toast.LENGTH_LONG).show(); return@get }
+            val programs = EpgGuide.programmes(response as? JSONArray ?: JSONArray())
+            if (programs.isEmpty()) {
+                Toast.makeText(this, "EPG отсутствует", Toast.LENGTH_SHORT).show()
+                return@get
+            }
+            val labels = programs.map {
+                (if (it.isOnAir(now)) "▶ " else if (it.isFuture(now)) "  " else "↶ ") +
+                    EpgGuide.day(it.startMs) + " " + EpgGuide.time(it.startMs) + "  " + it.title
+            }.toTypedArray()
+            val selected = programs.indexOfFirst { it.isOnAir(now) }.coerceAtLeast(0)
+            android.app.AlertDialog.Builder(this).setTitle("Программа · " + (title.text ?: ""))
+                .setSingleChoiceItems(labels, selected) { dialog, position ->
+                    dialog.dismiss()
+                    val program = programs[position]
+                    val bounds = EpgGuide.archiveBounds(program, System.currentTimeMillis())
+                    val builder = android.app.AlertDialog.Builder(this)
+                        .setTitle(program.title)
+                        .setMessage(EpgGuide.day(program.startMs) + " " +
+                            EpgGuide.time(program.startMs) + "–" + EpgGuide.time(program.endMs) +
+                            "\n\n" + program.description.take(800))
+                        .setNegativeButton("Назад", null)
+                        .setNeutralButton("● LIVE") { _, _ ->
+                            dvrStart = null; dvrEnd = null; recoveryAttempt = 0; begin()
+                        }
+                    if (bounds != null) builder.setPositiveButton("↶ Архив") { _, _ ->
+                        dvrStart = EpgGuide.iso(bounds.first)
+                        dvrEnd = EpgGuide.iso(bounds.second)
+                        recoveryAttempt = 0
+                        begin()
+                    }
+                    builder.show()
+                }.setNegativeButton("Закрыть", null).show()
+        }
+    }
+
+    /** Swipe horizontally to zap. Swipe vertically on left/right to adjust brightness/volume. */
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (!session.isTv() && active) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    touchStartX = event.x; touchStartY = event.y
+                }
+                MotionEvent.ACTION_UP -> {
+                    val dx = event.x - touchStartX
+                    val dy = event.y - touchStartY
+                    if (kotlin.math.abs(dx) > touchThreshold * 1.5f &&
+                        kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.5f) {
+                        switchChannel(if (dx < 0) 1 else -1)
+                        return true
+                    }
+                    if (kotlin.math.abs(dy) > touchThreshold &&
+                        kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.5f) {
+                        if (touchStartX < resources.displayMetrics.widthPixels / 2f) {
+                            val params = window.attributes
+                            val previous = if (params.screenBrightness < 0) 0.5f else params.screenBrightness
+                            params.screenBrightness = (previous - dy / resources.displayMetrics.heightPixels).coerceIn(0.05f, 1f)
+                            window.attributes = params
+                        } else {
+                            val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                            val direction = if (dy < 0) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER
+                            audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, 0)
+                        }
+                        showInfo(1800L)
+                        return true
+                    }
+                    if (kotlin.math.abs(dx) < touchThreshold && kotlin.math.abs(dy) < touchThreshold) {
+                        showInfo(4500L)
+                    }
+                }
+            }
+        }
+        return super.dispatchTouchEvent(event)
+    }
+
     private fun switchChannel(direction: Int) {
         val channels = session.channels
         if (channels.size < 2) return
@@ -273,6 +423,8 @@ class PlayerActivity : Activity() {
         when (keyCode) {
             KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_PAGE_UP -> { switchChannel(1); return true }
             KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_PAGE_DOWN -> { switchChannel(-1); return true }
+            KeyEvent.KEYCODE_INFO, KeyEvent.KEYCODE_GUIDE -> { showGuide(); return true }
+            KeyEvent.KEYCODE_DPAD_CENTER -> { showInfo(); return true }
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                 if (::player.isInitialized) player.playWhenReady = !player.playWhenReady
                 return true
@@ -290,6 +442,7 @@ class PlayerActivity : Activity() {
         active = false
         generation++
         cancelRetry()
+        infoHide = null
         handler.removeCallbacksAndMessages(null)
         if (::player.isInitialized) player.stop()
         releaseLease()

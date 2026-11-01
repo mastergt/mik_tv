@@ -45,7 +45,7 @@ class ApiClient {
                     readTimeout = 20000
                     useCaches = false
                     setRequestProperty("Accept", "application/json")
-                    setRequestProperty("User-Agent", "mik_tv-android/0.1.0")
+                    setRequestProperty("User-Agent", "mik_tv-android/0.2.0")
                     if (!token.isNullOrBlank()) setRequestProperty("Authorization", "Bearer $token")
                     if (body != null) {
                         doOutput = true

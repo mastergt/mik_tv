@@ -107,6 +107,13 @@ class AppSession(private val context: Context) {
 
     fun markAuthenticated(value: Boolean) { authenticated = value }
 
+    fun saveLastChannel(id: String) {
+        prefs.edit().putString("last_channel_" + identityKey(), id).apply()
+    }
+
+    fun lastChannel(): String? =
+        prefs.getString("last_channel_" + identityKey(), null)
+
     fun clearToken() = updateToken(null, false)
 
     private fun restoreToken() {
