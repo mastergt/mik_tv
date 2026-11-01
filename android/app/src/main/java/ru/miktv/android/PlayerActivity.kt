@@ -46,6 +46,7 @@ class PlayerActivity : Activity() {
     private lateinit var state: TextView
     private lateinit var nowNext: TextView
     private lateinit var infoPanel: LinearLayout
+    private var guideOverlay: PlayerGuideOverlay? = null
     private var infoHide: Runnable? = null
     private var touchStartX = 0f
     private var touchStartY = 0f
@@ -148,6 +149,41 @@ class PlayerActivity : Activity() {
         // Menu is an optional bottom sheet, never a persistent top banner.
         root.addView(overlay, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
         setContentView(root)
+        // This overlay lives in the existing PlayerActivity above PlayerView.
+        // Browsing categories and EPG never stops playback or renews a lease.
+        guideOverlay = PlayerGuideOverlay(
+            this, root, session.channels,
+            { streamId },
+            { channelId, complete ->
+                val now = System.currentTimeMillis()
+                val route = "/client/streams/" + channelId + "/epg?from=" +
+                    MainActivity.enc(EpgGuide.iso(now - 24 * 3600000L)) + "&to=" +
+                    MainActivity.enc(EpgGuide.iso(now + 24 * 3600000L))
+                api.get(session.baseUrl, session.token, route) { response, error ->
+                    complete(if (error == null) EpgGuide.programmes(response as? JSONArray ?: JSONArray())
+                        else null, error?.message)
+                }
+            },
+            { channelId ->
+                streamId = channelId
+                dvrStart = null
+                dvrEnd = null
+                recoveryAttempt = 0
+                begin()
+            },
+            { channelId, programme ->
+                val bounds = EpgGuide.archiveBounds(programme, System.currentTimeMillis())
+                if (bounds != null) {
+                    streamId = channelId
+                    dvrStart = EpgGuide.iso(bounds.first)
+                    dvrEnd = EpgGuide.iso(bounds.second)
+                    recoveryAttempt = 0
+                    begin()
+                }
+            },
+            { finish() },
+            { session.favorites }
+        )
 
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
@@ -190,7 +226,7 @@ class PlayerActivity : Activity() {
         hideInfo()
         val channel = session.channels.find { it.id == streamId }
         title.text = (channel?.number ?: "") + "  " + (channel?.name ?: "Канал " + streamId)
-        loadGuidePreview(epoch)
+        // EPG is fetched only when the user opens the overlay or selects a channel.
         state.text = "Запрос доступа к видеопотоку…"
         api.post(session.baseUrl, session.token, "/client/playback/start", JSONObject().put("stream_id", streamId)) { response, error ->
             if (!active || generation != epoch) return@post
@@ -260,12 +296,12 @@ class PlayerActivity : Activity() {
         cancelRetry()
         if (recoveryAttempt >= 3) {
             state.text = "Не удалось восстановить эфир: " + problem + ". Нажмите «Повторить»."
-            showInfo(0L)
+            hideInfo()
             return
         }
         val wait = listOf(1500L, 3000L, 6000L)[recoveryAttempt++]
         state.text = "Поток недоступен. Повтор " + recoveryAttempt + "/3 через " + wait / 1000 + " сек"
-        showInfo(0L)
+        hideInfo()
         val expected = generation
         val task = Runnable { if (active && expected == generation) begin() }
         retry = task
@@ -341,19 +377,12 @@ class PlayerActivity : Activity() {
     }
 
     private fun hideInfo() {
-        infoHide?.let(handler::removeCallbacks)
-        infoHide = null
-        infoPanel.visibility = View.GONE
+        guideOverlay?.close()
+        if (::infoPanel.isInitialized) infoPanel.visibility = View.GONE
     }
 
     private fun showInfo(timeoutMs: Long = 4500L) {
-        infoHide?.let(handler::removeCallbacks)
-        infoPanel.visibility = View.VISIBLE
-        if (timeoutMs > 0L) {
-            val hide = Runnable { if (active) infoPanel.visibility = View.GONE }
-            infoHide = hide
-            handler.postDelayed(hide, timeoutMs)
-        }
+        guideOverlay?.open()
     }
 
     private fun loadGuidePreview(expectedGeneration: Int) {
@@ -421,6 +450,7 @@ class PlayerActivity : Activity() {
 
     /** Swipe horizontally to zap. Swipe vertically on left/right to adjust brightness/volume. */
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (guideOverlay?.isOpen() == true) return super.dispatchTouchEvent(event)
         if (!session.isTv() && active) {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
@@ -454,7 +484,7 @@ class PlayerActivity : Activity() {
                         return true
                     }
                     if (kotlin.math.abs(dx) < touchThreshold && kotlin.math.abs(dy) < touchThreshold) {
-                        if (infoPanel.visibility == View.VISIBLE) hideInfo() else showInfo(4500L)
+                        guideOverlay?.open()
                     }
                 }
             }
@@ -474,11 +504,12 @@ class PlayerActivity : Activity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (guideOverlay?.handleKey(keyCode) == true) return true
         when (keyCode) {
             KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_PAGE_UP -> { switchChannel(1); return true }
             KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_PAGE_DOWN -> { switchChannel(-1); return true }
-            KeyEvent.KEYCODE_INFO, KeyEvent.KEYCODE_GUIDE -> { showGuide(); return true }
-            KeyEvent.KEYCODE_DPAD_CENTER -> { if (infoPanel.visibility == View.VISIBLE) hideInfo() else showInfo(); return true }
+            KeyEvent.KEYCODE_INFO, KeyEvent.KEYCODE_GUIDE -> { guideOverlay?.open(); return true }
+            KeyEvent.KEYCODE_DPAD_CENTER -> { guideOverlay?.open(); return true }
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                 // LIVE cannot be paused; allow pause only when DVR is active.
                 if (::player.isInitialized && dvrStart != null) player.playWhenReady = !player.playWhenReady
@@ -486,6 +517,11 @@ class PlayerActivity : Activity() {
             }
         }
         return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onBackPressed() {
+        if (guideOverlay?.isOpen() == true) guideOverlay?.close()
+        else super.onBackPressed()
     }
 
     override fun onStart() {
@@ -498,6 +534,7 @@ class PlayerActivity : Activity() {
         generation++
         cancelRetry()
         cancelStallCheck()
+        guideOverlay?.close()
         infoHide = null
         handler.removeCallbacksAndMessages(null)
         if (::player.isInitialized) player.stop()
@@ -506,6 +543,7 @@ class PlayerActivity : Activity() {
     }
 
     override fun onDestroy() {
+        guideOverlay?.destroy()
         if (::player.isInitialized) {
             playerView.player = null
             player.release()
