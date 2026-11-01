@@ -235,3 +235,26 @@ button:focus,input:focus,select:focus { outline:3px solid #ffb000; outline-offse
  .tv-menu-row-detail {font-size:11px;}
  .tv-home-footer {height:35px;line-height:35px;font-size:11px;padding:0 9px;}
 }
+
+/* mik_tv 0.9.0: lightweight search and network recovery */
+.channel-search-button {border:1px solid #7f8897;border-radius:3px;background:#263446;color:#f7d188;padding:2px 10px;font-size:14px;margin-left:9px;}
+.search-dialog {width:620px;}
+.recovery-banner {position:absolute;z-index:51;left:12%;right:12%;top:80px;min-height:55px;padding:11px 16px;background:#4a2e16;color:#fff4df;border:1px solid #e6a337;font-size:18px;text-align:center;}
+.recovery-banner button {margin-left:20px;border:1px solid #ffd783;background:#dfa53f;color:#14202b;padding:5px 12px;font-size:17px;}
+.platform-mag250 .recovery-banner {background:#392918;box-shadow:none;border-radius:0;}
+.tv-keyboard-on #channel-search-overlay {padding-top:1vh;}
+.tv-keyboard-on #channel-search-form {width:620px;max-width:91%;padding:8px 20px;border-radius:0;}
+.tv-keyboard-on #channel-search-form h1 {font-size:21px;margin:0 0 4px;}
+.tv-keyboard-on #channel-search-form p {display:none;}
+.tv-keyboard-on #channel-search-form label {font-size:14px;margin:5px 0 2px;}
+.tv-keyboard-on #channel-search-form input {height:36px;font-size:17px;padding:4px 10px;}
+.tv-keyboard-on #channel-search-form .dialog-actions {display:none;}
+@media(max-height:650px),(max-width:850px){
+ .channel-search-button {font-size:11px;padding:2px 5px;}
+ .recovery-banner {left:2%;right:2%;top:52px;font-size:13px;min-height:36px;padding:5px;}
+ .recovery-banner button {font-size:12px;padding:2px 6px;}
+ .tv-keyboard-on #channel-search-form {padding:4px 12px;}
+ .tv-keyboard-on #channel-search-form h1 {font-size:17px;}
+ .tv-keyboard-on #channel-search-form label {font-size:12px;}
+ .tv-keyboard-on #channel-search-form input {height:29px;font-size:15px;}
+}
