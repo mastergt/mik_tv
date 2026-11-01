@@ -8,6 +8,7 @@ import android.media.AudioManager
 import android.view.MotionEvent
 import android.widget.Toast
 import android.os.Bundle
+import android.util.Log
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
@@ -23,6 +24,8 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
 import org.json.JSONArray
 import org.json.JSONObject
@@ -32,6 +35,7 @@ import java.util.concurrent.TimeUnit
  * One player for TV and mobile. Uses a backend playback lease for LIVE and DVR;
  * playback URLs are obtained only from the authorised client API.
  */
+@androidx.annotation.OptIn(UnstableApi::class)
 class PlayerActivity : Activity() {
     private val session get() = (application as MikTvApp).session
     private val api get() = (application as MikTvApp).api
@@ -45,6 +49,7 @@ class PlayerActivity : Activity() {
     private var infoHide: Runnable? = null
     private var touchStartX = 0f
     private var touchStartY = 0f
+    private var touchStartedOnMenu = false
     private val touchThreshold by lazy { 65f * resources.displayMetrics.density }
 
     private var streamId = ""
@@ -57,10 +62,11 @@ class PlayerActivity : Activity() {
     private var recoveryAttempt = 0
     private var generation = 0
     private var active = false
-    private var stalledAt = 0L
-    private var lastProgress = 0L
     private var lastReadyAt = 0L
     private var retry: Runnable? = null
+    private var stallCheck: Runnable? = null
+    private var sourceRevision = 0
+    private var bufferingSinceMs = 0L
 
     private data class Source(val url: String, val protocol: String) {
         companion object {
@@ -83,11 +89,17 @@ class PlayerActivity : Activity() {
         dvrEnd = intent.getStringExtra("dvr_end")
         if (streamId.isBlank() || session.token.isNullOrEmpty()) { finish(); return }
 
-        player = ExoPlayer.Builder(this).build()
+        // Keep more data buffered for 4x10s rolling HLS and avoid rapid rebuffer loops.
+        val buffering = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                LivePlaybackPolicy.MIN_BUFFER_MS, LivePlaybackPolicy.MAX_BUFFER_MS,
+                LivePlaybackPolicy.STARTUP_BUFFER_MS, LivePlaybackPolicy.REBUFFER_MS)
+            .build()
+        player = ExoPlayer.Builder(this).setLoadControl(buffering).build()
         playerView = PlayerView(this).apply {
             player = this@PlayerActivity.player
-            useController = true
-            controllerAutoShow = !session.isTv()
+            // IPTV LIVE has no seekbar or transport controls.
+            useController = false
         }
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         root.addView(playerView, FrameLayout.LayoutParams(-1, -1))
@@ -129,15 +141,19 @@ class PlayerActivity : Activity() {
         buttons.addView(back)
         buttons.addView(guideButton)
         buttons.addView(retryButton)
-        buttons.addView(live)
+        if (dvrStart != null) buttons.addView(live)
         overlay.addView(buttons)
         infoPanel = overlay
-        root.addView(overlay, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
+        infoPanel.visibility = View.GONE
+        // Menu is an optional bottom sheet, never a persistent top banner.
+        root.addView(overlay, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
         setContentView(root)
 
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
-                if (active) trySource("Ошибка декодера: " + error.errorCodeName)
+                Log.w("mik_tv", "Player error stream=$streamId source=$sourceIndex: " +
+                    error.errorCodeName + ": " + error.message, error)
+                if (active) trySource("Ошибка видеопотока: " + error.errorCodeName)
             }
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (!active) return
@@ -145,7 +161,15 @@ class PlayerActivity : Activity() {
                     state.text = if (dvrStart == null) "LIVE · воспроизведение" else "АРХИВ · воспроизведение"
                     lastReadyAt = System.currentTimeMillis()
                     session.saveLastChannel(streamId)
-                    showInfo(6500L)
+                    bufferingSinceMs = 0L
+                    Log.d("mik_tv", "READY stream=$streamId source=$sourceIndex liveOffsetMs=" +
+                        player.currentLiveOffset + " bufferedMs=" + player.totalBufferedDuration)
+                    // Do not obscure LIVE video after buffering or resuming.
+                }
+                if (playbackState == Player.STATE_BUFFERING && bufferingSinceMs == 0L) {
+                    bufferingSinceMs = System.currentTimeMillis()
+                    Log.d("mik_tv", "BUFFERING stream=$streamId source=$sourceIndex bufferedMs=" +
+                        player.totalBufferedDuration)
                 }
                 if (playbackState == Player.STATE_ENDED && dvrStart == null) trySource("Поток завершён")
             }
@@ -158,11 +182,12 @@ class PlayerActivity : Activity() {
         if (!active) return
         val epoch = ++generation
         cancelRetry()
+        cancelStallCheck()
         sourceIndex = -1
         sources = emptyList()
         releaseLease()
         player.stop()
-        showInfo(0L)
+        hideInfo()
         val channel = session.channels.find { it.id == streamId }
         title.text = (channel?.number ?: "") + "  " + (channel?.name ?: "Канал " + streamId)
         loadGuidePreview(epoch)
@@ -212,17 +237,22 @@ class PlayerActivity : Activity() {
         }
         val source = sources[sourceIndex]
         state.text = "Подключение: источник " + (sourceIndex + 1) + " / " + sources.size
-        showInfo(0L)
+        cancelStallCheck()
+        sourceRevision++
         val item = MediaItem.Builder().setUri(source.url).apply {
-            if (source.protocol == "hls" || source.url.contains(".m3u8", true))
+            if (source.protocol == "hls" || source.url.contains(".m3u8", true)) {
                 setMimeType(MimeTypes.APPLICATION_M3U8)
+                if (dvrStart == null) {
+                    setLiveConfiguration(MediaItem.LiveConfiguration.Builder()
+                        .setTargetOffsetMs(LivePlaybackPolicy.TARGET_LIVE_OFFSET_MS).build())
+                }
+            }
         }.build()
         player.setMediaItem(item)
         player.prepare()
         player.playWhenReady = true
-        stalledAt = System.currentTimeMillis()
-        lastProgress = player.currentPosition
-        scheduleStallCheck(generation)
+        bufferingSinceMs = System.currentTimeMillis()
+        scheduleStallCheck(generation, sourceRevision)
     }
 
     private fun scheduleRecovery(problem: String) {
@@ -270,24 +300,38 @@ class PlayerActivity : Activity() {
         }, heartbeatInterval)
     }
 
-    /** Detects a truly stuck media clock, not a paused DVR or temporary buffering. */
-    private fun scheduleStallCheck(expected: Int) {
-        handler.postDelayed(object : Runnable {
+    /** A rolling HLS playlist with 10-second segments can legitimately pause position updates.
+     *  Only sustained buffering is an error; cancel old source timers on every failover. */
+    private fun cancelStallCheck() {
+        stallCheck?.let(handler::removeCallbacks)
+        stallCheck = null
+        bufferingSinceMs = 0L
+    }
+
+    private fun scheduleStallCheck(expected: Int, expectedSource: Int) {
+        val task = object : Runnable {
             override fun run() {
-                if (!active || expected != generation || !player.playWhenReady) return
-                if (player.playbackState == Player.STATE_READY) {
-                    val current = player.currentPosition
-                    if (current > lastProgress) {
-                        lastProgress = current
-                        stalledAt = System.currentTimeMillis()
-                        if (System.currentTimeMillis() - lastReadyAt > 30000L) recoveryAttempt = 0
+                if (!active || expected != generation || expectedSource != sourceRevision) return
+                if (!player.playWhenReady || player.playbackState == Player.STATE_IDLE ||
+                    player.playbackState == Player.STATE_ENDED) return
+                val now = System.currentTimeMillis()
+                if (player.playbackState != Player.STATE_BUFFERING) {
+                    bufferingSinceMs = 0L
+                    if (player.playbackState == Player.STATE_READY &&
+                        now - lastReadyAt >= 30000L) recoveryAttempt = 0
+                } else {
+                    if (bufferingSinceMs == 0L) bufferingSinceMs = now
+                    if (LivePlaybackPolicy.hasExceededBufferingTimeout(true, bufferingSinceMs, now)) {
+                        Log.w("mik_tv", "Buffering exceeded 60s: stream=$streamId source=$sourceIndex")
+                        trySource("Нет видеоданных более 60 секунд")
+                        return
                     }
                 }
-                if (System.currentTimeMillis() - stalledAt > 22000L) {
-                    trySource("Видео остановилось более чем на 22 сек")
-                } else handler.postDelayed(this, 5000L)
+                handler.postDelayed(this, 5000L)
             }
-        }, 5000L)
+        }
+        stallCheck = task
+        handler.postDelayed(task, 5000L)
     }
 
     private fun releaseLease() {
@@ -296,7 +340,13 @@ class PlayerActivity : Activity() {
         api.post(session.baseUrl, session.token, "/client/playback/stop", JSONObject().put("lease_token", key)) { _, _ -> }
     }
 
-    private fun showInfo(timeoutMs: Long = 6000L) {
+    private fun hideInfo() {
+        infoHide?.let(handler::removeCallbacks)
+        infoHide = null
+        infoPanel.visibility = View.GONE
+    }
+
+    private fun showInfo(timeoutMs: Long = 4500L) {
         infoHide?.let(handler::removeCallbacks)
         infoPanel.visibility = View.VISIBLE
         if (timeoutMs > 0L) {
@@ -375,8 +425,12 @@ class PlayerActivity : Activity() {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     touchStartX = event.x; touchStartY = event.y
+                    touchStartedOnMenu = infoPanel.visibility == View.VISIBLE &&
+                        touchStartY >= infoPanel.top
                 }
                 MotionEvent.ACTION_UP -> {
+                    // Keep taps on menu buttons with Android's normal click dispatch.
+                    if (touchStartedOnMenu) return super.dispatchTouchEvent(event)
                     val dx = event.x - touchStartX
                     val dy = event.y - touchStartY
                     if (kotlin.math.abs(dx) > touchThreshold * 1.5f &&
@@ -396,11 +450,11 @@ class PlayerActivity : Activity() {
                             val direction = if (dy < 0) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER
                             audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, 0)
                         }
-                        showInfo(1800L)
+                        // Gestures adjust volume or brightness without showing UI.
                         return true
                     }
                     if (kotlin.math.abs(dx) < touchThreshold && kotlin.math.abs(dy) < touchThreshold) {
-                        showInfo(4500L)
+                        if (infoPanel.visibility == View.VISIBLE) hideInfo() else showInfo(4500L)
                     }
                 }
             }
@@ -424,9 +478,10 @@ class PlayerActivity : Activity() {
             KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_PAGE_UP -> { switchChannel(1); return true }
             KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_PAGE_DOWN -> { switchChannel(-1); return true }
             KeyEvent.KEYCODE_INFO, KeyEvent.KEYCODE_GUIDE -> { showGuide(); return true }
-            KeyEvent.KEYCODE_DPAD_CENTER -> { showInfo(); return true }
+            KeyEvent.KEYCODE_DPAD_CENTER -> { if (infoPanel.visibility == View.VISIBLE) hideInfo() else showInfo(); return true }
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
-                if (::player.isInitialized) player.playWhenReady = !player.playWhenReady
+                // LIVE cannot be paused; allow pause only when DVR is active.
+                if (::player.isInitialized && dvrStart != null) player.playWhenReady = !player.playWhenReady
                 return true
             }
         }
@@ -442,6 +497,7 @@ class PlayerActivity : Activity() {
         active = false
         generation++
         cancelRetry()
+        cancelStallCheck()
         infoHide = null
         handler.removeCallbacksAndMessages(null)
         if (::player.isInitialized) player.stop()
