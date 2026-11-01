@@ -54,7 +54,6 @@ class PlayerGuideOverlay(
     private var lastTapAt = 0L
     private val cache = mutableMapOf<String, Pair<Long, List<Programme>>>()
     private var shownEpg: List<Programme> = emptyList()
-    private var shownChannelName = ""
     private fun dp(n: Int) = (n * activity.resources.displayMetrics.density + .5f).toInt()
     private fun label(s: String, sp: Float) = TextView(activity).apply {
         text = s; textSize = sp; setTextColor(fg)
@@ -190,7 +189,6 @@ class PlayerGuideOverlay(
                 clock.text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
                 // Update the small elapsed/remaining bar while the menu is open.
                 if (shownEpg.isNotEmpty()) {
-                    refreshCurrentProgramme()
                     epgRows.notifyDataSetChanged()
                 }
                 handler.postDelayed(this, 15000L)
@@ -225,7 +223,6 @@ class PlayerGuideOverlay(
         channelRows.notifyDataSetChanged()
         if (filtered.isEmpty()) {
             shownEpg = emptyList()
-            shownChannelName = ""
             heading.text = "В категории «$genre» нет каналов"
             epgRows.set(emptyList())
             return
@@ -241,7 +238,6 @@ class PlayerGuideOverlay(
         val requestId = ++revision
         delayed?.let(handler::removeCallbacks)
         shownEpg = emptyList()
-        shownChannelName = ""
         heading.text = channel.name + " · загрузка EPG…"
         epgRows.set(emptyList())
         val cached = cache[channel.id]
@@ -264,17 +260,12 @@ class PlayerGuideOverlay(
         delayed = task
         handler.postDelayed(task, 230L)
     }
-    private fun refreshCurrentProgramme() {
-        val (current, next) = EpgGuide.nowNext(shownEpg, System.currentTimeMillis())
-        heading.text = shownChannelName + "\nСейчас: " + (current?.title ?: "нет данных") +
-            "   ·   Далее: " + (next?.title ?: "нет данных")
-    }
-
     private fun showEpg(channel: Channel, data: List<Programme>) {
         val now = System.currentTimeMillis()
-        shownChannelName = channel.name
         shownEpg = data
-        refreshCurrentProgramme()
+        // The on-air programme is already highlighted in the list below.
+        // Keep only the channel name above the schedule; no duplicate now/next labels.
+        heading.text = channel.name
         epgRows.set(data)
         val index = data.indexOfFirst { it.isOnAir(now) }
         if (index >= 0) epg.setSelection(epgRows.positionFor(index))
@@ -376,7 +367,7 @@ class PlayerGuideOverlay(
                 val onAir = p.isOnAir(now)
                 views.title.text = (if (onAir) "▶ " else "") +
                     EpgGuide.time(p.startMs) + "  " + p.title
-                views.title.setTextColor(fg)
+                views.title.setTextColor(if (onAir) yellow else fg)
                 views.title.typeface = Typeface.DEFAULT
                 // Only the programme currently on air gets the two-colour progress bar.
                 views.progress.visibility = if (onAir) View.VISIBLE else View.GONE
