@@ -37,3 +37,36 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+      - name: Prepare release signing (only when configured)
+        env:
+          KEYSTORE_B64: ${{ secrets.MIKTV_RELEASE_KEYSTORE_B64 }}
+          STORE_PASSWORD: ${{ secrets.MIKTV_RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.MIKTV_RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.MIKTV_RELEASE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/mik_tv-release.jks"
+            echo "MIKTV_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/mik_tv-release.jks" >> "$GITHUB_ENV"
+            echo "RELEASE_SIGNING_ENABLED=true" >> "$GITHUB_ENV"
+          else
+            echo "Release signing not configured; publishing debug APK only."
+          fi
+      - name: Build signed release APK
+        if: env.RELEASE_SIGNING_ENABLED == 'true'
+        working-directory: android
+        env:
+          MIKTV_RELEASE_STORE_PASSWORD: ${{ secrets.MIKTV_RELEASE_STORE_PASSWORD }}
+          MIKTV_RELEASE_KEY_ALIAS: ${{ secrets.MIKTV_RELEASE_KEY_ALIAS }}
+          MIKTV_RELEASE_KEY_PASSWORD: ${{ secrets.MIKTV_RELEASE_KEY_PASSWORD }}
+        run: gradle :app:assembleRelease --no-daemon
+      - name: Upload signed release APK
+        if: env.RELEASE_SIGNING_ENABLED == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mik_tv-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+      - name: Delete transient release key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/mik_tv-release.jks"
