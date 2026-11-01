@@ -3,13 +3,13 @@ const http=require('http'),fs=require('fs'),path=require('path');
 const root=path.resolve(__dirname,'../..');
 const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png'};
 const channels=[
-  {id:'1',number:1,name:'Первый канал HD',logo_url:null,app_type:'tv'},
-  {id:'2',number:2,name:'Россия 1',logo_url:null,app_type:'tv'},
-  {id:'3',number:3,name:'Матч ТВ',logo_url:null,app_type:'tv'},
-  {id:'4',number:4,name:'НТВ',logo_url:null,app_type:'tv'},
-  {id:'5',number:5,name:'РЕН ТВ',logo_url:null,app_type:'tv'},
-  {id:'6',number:6,name:'Пятый канал',logo_url:null,app_type:'tv'},
-  {id:'7',number:7,name:'Культура',logo_url:null,app_type:'tv'}
+  {id:'1',number:1,name:'Первый канал HD',logo_url:null,app_type:'tv',genres:[{id:1,name:'Новости'}]},
+  {id:'2',number:2,name:'Россия 1',logo_url:null,app_type:'tv',genres:[{id:2,name:'Развлечения'}]},
+  {id:'3',number:3,name:'Матч ТВ',logo_url:null,app_type:'tv',genres:[{id:3,name:'Спорт'}]},
+  {id:'4',number:4,name:'НТВ',logo_url:null,app_type:'tv',genres:[{id:1,name:'Новости'}]},
+  {id:'5',number:5,name:'РЕН ТВ',logo_url:null,app_type:'tv',genres:[{id:2,name:'Развлечения'}]},
+  {id:'6',number:6,name:'Пятый канал',logo_url:null,app_type:'tv',genres:[{id:1,name:'Новости'}]},
+  {id:'7',number:7,name:'Культура',logo_url:null,app_type:'tv',genres:[{id:4,name:'Познавательные'}]}
 ];
 const port=Number(process.env.PORT||4411);
 function send(res,status,obj){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Access-Control-Allow-Origin':'*'});res.end(JSON.stringify(obj));}
