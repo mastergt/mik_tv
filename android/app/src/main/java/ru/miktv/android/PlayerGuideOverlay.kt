@@ -53,6 +53,8 @@ class PlayerGuideOverlay(
     private var lastTapId = ""
     private var lastTapAt = 0L
     private val cache = mutableMapOf<String, Pair<Long, List<Programme>>>()
+    private var shownEpg: List<Programme> = emptyList()
+    private var shownChannelName = ""
     private fun dp(n: Int) = (n * activity.resources.displayMetrics.density + .5f).toInt()
     private fun label(s: String, sp: Float) = TextView(activity).apply {
         text = s; textSize = sp; setTextColor(fg)
@@ -186,6 +188,11 @@ class PlayerGuideOverlay(
             override fun run() {
                 if (!isOpen()) return
                 clock.text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+                // Update the small elapsed/remaining bar while the menu is open.
+                if (shownEpg.isNotEmpty()) {
+                    refreshCurrentProgramme()
+                    epgRows.notifyDataSetChanged()
+                }
                 handler.postDelayed(this, 15000L)
             }
         }
@@ -217,6 +224,8 @@ class PlayerGuideOverlay(
         selected = ""
         channelRows.notifyDataSetChanged()
         if (filtered.isEmpty()) {
+            shownEpg = emptyList()
+            shownChannelName = ""
             heading.text = "В категории «$genre» нет каналов"
             epgRows.set(emptyList())
             return
@@ -231,6 +240,8 @@ class PlayerGuideOverlay(
         channelRows.notifyDataSetChanged()
         val requestId = ++revision
         delayed?.let(handler::removeCallbacks)
+        shownEpg = emptyList()
+        shownChannelName = ""
         heading.text = channel.name + " · загрузка EPG…"
         epgRows.set(emptyList())
         val cached = cache[channel.id]
@@ -253,11 +264,17 @@ class PlayerGuideOverlay(
         delayed = task
         handler.postDelayed(task, 230L)
     }
+    private fun refreshCurrentProgramme() {
+        val (current, next) = EpgGuide.nowNext(shownEpg, System.currentTimeMillis())
+        heading.text = shownChannelName + "\nСейчас: " + (current?.title ?: "нет данных") +
+            "   ·   Далее: " + (next?.title ?: "нет данных")
+    }
+
     private fun showEpg(channel: Channel, data: List<Programme>) {
         val now = System.currentTimeMillis()
-        val (current, next) = EpgGuide.nowNext(data, now)
-        heading.text = channel.name + "\nСейчас: " + (current?.title ?: "нет данных") +
-            "   ·   Далее: " + (next?.title ?: "нет данных")
+        shownChannelName = channel.name
+        shownEpg = data
+        refreshCurrentProgramme()
         epgRows.set(data)
         val index = data.indexOfFirst { it.isOnAir(now) }
         if (index >= 0) epg.setSelection(epgRows.positionFor(index))
@@ -296,6 +313,7 @@ class PlayerGuideOverlay(
         }
     }
     private data class GuideRow(val item: Programme?, val day: Long)
+    private data class ProgrammeRowViews(val title: TextView, val progress: EpgProgressBar)
     private inner class ProgrammeRows : BaseAdapter() {
         private val rows = mutableListOf<GuideRow>()
         fun set(events: List<Programme>) {
@@ -323,23 +341,48 @@ class PlayerGuideOverlay(
         override fun getItem(position: Int): Any = rows[position]
         override fun getItemId(position: Int) = position.toLong()
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-            val v = convertView as? TextView ?: label("", 17f).apply {
-                minHeight = dp(36)
+            val row: LinearLayout
+            val views: ProgrammeRowViews
+            if (convertView is LinearLayout && convertView.tag is ProgrammeRowViews) {
+                row = convertView
+                views = row.tag as ProgrammeRowViews
+            } else {
+                row = LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                }
+                val text = label("", 17f).apply {
+                    minHeight = dp(36)
+                }
+                row.addView(text, LinearLayout.LayoutParams(-1, -2))
+                val progress = EpgProgressBar(activity)
+                val params = LinearLayout.LayoutParams(dp(112), dp(4)).apply {
+                    marginStart = dp(12)
+                    bottomMargin = dp(7)
+                }
+                row.addView(progress, params)
+                views = ProgrammeRowViews(text, progress)
+                row.tag = views
             }
             val r = rows[position]
             val p = r.item
+            val now = System.currentTimeMillis()
             if (p == null) {
-                v.text = "──── " + SimpleDateFormat("EEEE, d MMMM", Locale("ru", "RU"))
+                views.title.text = "──── " + SimpleDateFormat("EEEE, d MMMM", Locale("ru", "RU"))
                     .format(Date(r.day)) + " ────"
-                v.setTextColor(Color.rgb(204, 209, 220))
-                v.typeface = Typeface.DEFAULT_BOLD
+                views.title.setTextColor(Color.rgb(204, 209, 220))
+                views.title.typeface = Typeface.DEFAULT_BOLD
+                views.progress.visibility = View.GONE
             } else {
-                v.text = (if (p.isOnAir(System.currentTimeMillis())) "▶ " else "") +
+                val onAir = p.isOnAir(now)
+                views.title.text = (if (onAir) "▶ " else "") +
                     EpgGuide.time(p.startMs) + "  " + p.title
-                v.setTextColor(fg)
-                v.typeface = Typeface.DEFAULT
+                views.title.setTextColor(fg)
+                views.title.typeface = Typeface.DEFAULT
+                // Only the programme currently on air gets the two-colour progress bar.
+                views.progress.visibility = if (onAir) View.VISIBLE else View.GONE
+                if (onAir) views.progress.fraction = EpgGuide.elapsedFraction(p, now)
             }
-            return v
+            return row
         }
     }
 }
