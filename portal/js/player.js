@@ -1,16 +1,28 @@
 (function(root){
   'use strict';
   function Player(video){
-    this.video=video;this.hls=null;this.src='';this.onError=null;this.hlsLoading=false;this.serial=0;
+    this.video=video;this.hls=null;this.src='';this.onError=null;this.hlsLoading=false;this.serial=0;this.stallTimer=null;
     this.engine=(root.PortalPlatform.current||root.PortalPlatform.detect()).engine;
     this.native=this.engine==='mag250'?new root.PortalMAG250():null;
     var self=this;
     video.onerror=function(){self.emitError('Ошибка видеоплеера');};
-    video.onstalled=function(){};
+    video.onstalled=function(){self.watchStall();};
+    video.onwaiting=function(){self.watchStall();};
+    video.onplaying=function(){self.clearStall();};
+    video.oncanplay=function(){self.clearStall();};
   }
-  Player.prototype.emitError=function(message){if(this.onError){var cb=this.onError;this.onError=null;cb(message);}};
+  Player.prototype.emitError=function(message){this.clearStall();if(this.onError){var cb=this.onError;this.onError=null;cb(message);}};
+  Player.prototype.clearStall=function(){if(this.stallTimer){clearTimeout(this.stallTimer);this.stallTimer=null;}};
+  Player.prototype.watchStall=function(){
+    if(this.native||this.stallTimer||!this.src||this.video.paused)return;
+    var self=this,seq=this.serial;
+    this.stallTimer=setTimeout(function(){
+      self.stallTimer=null;
+      if(seq===self.serial && self.video.readyState<3 && !self.video.paused)self.emitError('Видео остановилось: нет данных 18 с');
+    },18000);
+  };
   Player.prototype.stop=function(){
-    this.serial++;
+    this.clearStall();this.serial++;
     if(this.hls){try{this.hls.destroy();}catch(e){}this.hls=null;}
     try{this.video.pause();this.video.removeAttribute('src');this.video.load();}catch(e){}
     if(this.native)this.native.stop();

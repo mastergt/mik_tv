@@ -9,6 +9,7 @@
     return [
       {id:'channels',title:'Телеканалы',detail:'Все доступные каналы'},
       {id:'continue',title:'Продолжить просмотр',detail:'Последний выбранный телеканал'},
+      {id:'search',title:'Поиск',detail:'По названию, номеру и жанру'},
       {id:'genres',title:'Категории',detail:'Жанры из загруженного каталога'},
       {id:'favorites',title:'Избранное',detail:'Сохранённые каналы'},
       {id:'epg',title:'Телепрограмма',detail:'Программа текущего канала'},
@@ -73,6 +74,7 @@
     this.close();
     if(entry.id==='channels')app.setChannelMode('all');
     else if(entry.id==='favorites')app.setChannelMode('favorites');
+    else if(entry.id==='search')app.openSearch();
     else if(entry.id==='continue')app.resumeLast();
     else if(entry.id==='epg'){if(app.current)app.showEPG(true);else app.toast('Сначала выберите канал');}
     else if(entry.id==='theme')app.setTheme(U.el('app').className.indexOf('theme-modern')>=0?'classic':'modern');
