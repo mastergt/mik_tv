@@ -547,8 +547,10 @@ class MainActivity : Activity() {
             channelList!!.setOnKeyListener { _, keyCode, event ->
                 if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && event.action == KeyEvent.ACTION_DOWN) {
                     categorySpinner?.let { spinner ->
-                        spinner.requestFocus()
-                        spinner.performClick()
+                        if ((spinner.adapter?.count ?: 0) > 0) {
+                            spinner.requestFocus()
+                            spinner.performClick()
+                        }
                     }
                     true
                 } else false
