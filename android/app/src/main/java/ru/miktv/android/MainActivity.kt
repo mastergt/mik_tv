@@ -326,7 +326,7 @@ class MainActivity : Activity() {
             setPadding(0, dp(20), 0, dp(12))
         })
 
-        val scroll = ScrollView(this).apply { fillViewport = false }
+        val scroll = ScrollView(this)
         val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         scroll.addView(list)
         page.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
