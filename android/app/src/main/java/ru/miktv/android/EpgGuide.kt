@@ -49,6 +49,14 @@ object EpgGuide {
         return now to next
     }
 
+    /** Fraction of the broadcast already aired (0..1); based on EPG timestamps, not HLS seek position. */
+    fun elapsedFraction(programme: Programme, at: Long): Float {
+        val duration = programme.endMs - programme.startMs
+        if (duration <= 0L) return 0f
+        val fraction = (at - programme.startMs).toDouble() / duration.toDouble()
+        return fraction.coerceIn(0.0, 1.0).toFloat()
+    }
+
     /** DVR requests are capped at 12 hours; a running programme ends before the current time. */
     fun archiveBounds(programme: Programme, now: Long): Pair<Long, Long>? {
         val end = minOf(programme.endMs, now - 5000L, programme.startMs + 12 * 3600000L)

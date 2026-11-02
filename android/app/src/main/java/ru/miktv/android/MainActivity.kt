@@ -178,7 +178,7 @@ class MainActivity : Activity() {
                 .put("manufacturer", Build.MANUFACTURER.take(100))
                 .put("model", Build.MODEL.take(100))
                 .put("os_version", Build.VERSION.RELEASE.take(80))
-                .put("app_version", "0.2.2")
+                .put("app_version", "0.2.4")
                 .put("device_name", "mik_tv Android")
                 .apply { session.deviceSecret()?.let { put("device_secret", it) } }
         } catch (e: Exception) {
