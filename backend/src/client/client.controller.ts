@@ -33,6 +33,7 @@ export class ClientController {
   @Post('auth/logout') @HttpCode(200) logout(@Req() req:ClientRequest){return this.identity.logout(req.client);}
   @Get('me') me(@Req() req:ClientRequest){return this.identity.me(req.client);}
   @Post('heartbeat') @HttpCode(200) heartbeat(@Req() req:ClientRequest){return this.identity.heartbeat(req.client);}
+  @Get('app-types') appTypes(@Req() req:ClientRequest){return this.catalog.appTypes(req.client);}
   @Get('streams') streams(@Req() req:ClientRequest,
     @Query() q:{limit?:string;offset?:string;app_type?:string}){return this.catalog.streams(req.client,q);}
   @Get('streams/:id/epg') epg(@Req() req:ClientRequest,@Param('id') id:string,

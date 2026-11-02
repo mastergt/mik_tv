@@ -43,6 +43,9 @@ class AppSession(private val context: Context) {
     var authenticated = false
     val channels = mutableListOf<Channel>()
     val favorites = mutableSetOf<String>()
+    val modules = mutableListOf<MiniApp>()
+    var autostartApp: String = prefs.getString("autostart_app", "tv") ?: "tv"
+        private set
     var uiPreference: String = prefs.getString("ui_mode", "auto") ?: "auto"
         private set
     var autoDiscover: Boolean = prefs.getBoolean("auto_discover", true)
@@ -68,6 +71,12 @@ class AppSession(private val context: Context) {
             authenticated = false
             restoreToken()
         }
+    }
+
+    fun setAutostartApp(code: String) {
+        require(code.isEmpty() || (code.length <= 50 && code.matches(Regex("[a-z][a-z0-9_]*"))))
+        autostartApp = code
+        prefs.edit().putString("autostart_app", code).apply()
     }
 
     fun setAutoDiscover(enabled: Boolean) {
@@ -126,6 +135,25 @@ class AppSession(private val context: Context) {
     private fun restoreToken() {
         token = try { Vault.read(prefs.getString("token_" + identityKey(), null)) } catch (_: Exception) { null }
         authenticated = false // /client/me is the authority
+    }
+}
+
+/** App types come from client/app-types, managed in the Angular admin panel. */
+data class MiniApp(
+    val code: String,
+    val name: String,
+    val icon: String?,
+    val order: Int,
+    val streamCount: Int
+) {
+    companion object {
+        fun fromJson(obj: JSONObject): MiniApp? {
+            val code = obj.optString("code")
+            if (!code.matches(Regex("[a-z][a-z0-9_]*")) || code.length > 50) return null
+            return MiniApp(code, obj.optString("name", code).take(200),
+                obj.optString("icon").takeIf { it.isNotBlank() }?.take(20),
+                obj.optInt("sort_order", 100), obj.optInt("stream_count", 0).coerceAtLeast(0))
+        }
     }
 }
 

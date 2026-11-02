@@ -9,7 +9,7 @@ export interface Provider {
   is_default?:boolean; networks?:string[];
 }
 export type Visibility = 'all'|'selected';
-export interface AppType { id:number; code:string; name:string; enabled:boolean }
+export interface AppType { id:number; code:string; name:string; enabled:boolean; sort_order:number; icon:string|null }
 export interface Genre { id:number; name:string; visibility:Visibility; is_adult:boolean; provider_ids?:number[] }
 export interface Stream {
   id:string; number:number; name:string; description:string|null; app_type_id:number;
