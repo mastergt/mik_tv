@@ -1,4 +1,7 @@
 import { isIP } from 'node:net';
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Db } from '../common/db';
 import { Audit } from '../common/audit';
@@ -10,7 +13,7 @@ import { only, sqlInsert, sqlUpdate } from '../common/sql';
 
 const columns=['name','slug','enabled','timezone','default_terminal_limit','default_concurrent_stream_limit',
   'playback_history_enabled','stream_monitoring_enabled'];
-const selection=`p.*, ARRAY(SELECT n.network::text FROM core.provider_ip_ranges n
+const selection=`p.*, CASE WHEN p.logo_sha IS NULL THEN NULL ELSE '/api/v1/providers/logos/'||p.logo_sha||'.png' END AS logo_url, ARRAY(SELECT n.network::text FROM core.provider_ip_ranges n
   WHERE n.provider_id=p.id ORDER BY family(n.network), masklen(n.network) DESC, n.network::text) AS networks`;
 
 /** Validates IPv4/IPv6 host/CIDR notation before passing inet conversion to PostgreSQL. */
@@ -32,6 +35,37 @@ export function validateNetworks(networks:string[]|undefined):string[]|undefined
 @Injectable()
 export class ProvidersService {
   constructor(@Inject(Db) private readonly db:Db, @Inject(Audit) private readonly audit:Audit, @Inject(Authz) private readonly authz:Authz){}
+
+  private readonly logoDir=resolve(process.env.PROVIDER_LOGO_DIR||'./storage/provider-logos');
+  async uploadLogo(actor:Actor,id:string,raw:unknown) {
+    const pid=Number(intId(id)); await this.authz.global(actor,'providers.write');
+    const source=(raw as Record<string,unknown>|null)?.image_base64;
+    if(typeof source!=='string'||source.length>700000||!/^[A-Za-z0-9+/]+={0,2}$/.test(source))throw new BadRequestException('Invalid PNG payload');
+    const file=Buffer.from(source,'base64');
+    if(file.length<33||file.length>500*1024||file.toString('hex',0,8)!=='89504e470d0a1a0a'||file.toString('ascii',12,16)!=='IHDR') throw new BadRequestException('PNG only, max 500 KB');
+    const w=file.readUInt32BE(16),h=file.readUInt32BE(20);
+    if(w<128||h<128||w>1024||h>1024||file.readUInt8(28)!==0)throw new BadRequestException('PNG dimensions must be 128-1024 px');
+    const sha=createHash('sha256').update(file).digest('hex');
+    await mkdir(this.logoDir,{recursive:true}); await writeFile(resolve(this.logoDir,sha+'.png'),file,{flag:'w'});
+    const updated=await this.db.one('UPDATE core.providers SET logo_sha=$1,updated_by=$2 WHERE id=$3 RETURNING id',[sha,actor.id,pid]);
+    if(!updated)throw new NotFoundException();
+    return {logo_url:'/api/v1/providers/logos/'+sha+'.png'};
+  }
+  async removeLogo(actor:Actor,id:string) {
+    const pid=Number(intId(id)); await this.authz.global(actor,'providers.write');
+    const row=await this.db.one('UPDATE core.providers SET logo_sha=NULL,updated_by=$1 WHERE id=$2 RETURNING id',[actor.id,pid]);
+    if(!row)throw new NotFoundException(); return {logo_url:null};
+  }
+  async logoFile(filename:string) {
+    if(!/^[a-f0-9]{64}\\.png$/.test(filename))throw new NotFoundException();
+    const found=await this.db.one('SELECT 1 FROM core.providers WHERE logo_sha=$1 LIMIT 1',[filename.slice(0,64)]);
+    if(!found)throw new NotFoundException();
+    try {return await readFile(resolve(this.logoDir,filename));}catch{throw new NotFoundException();}
+  }
+  async branding(providerId:number) {
+    const row=await this.db.one<{name:string;logo_url:string|null}>(`SELECT name,CASE WHEN logo_sha IS NULL THEN NULL ELSE '/api/v1/providers/logos/'||logo_sha||'.png' END AS logo_url FROM core.providers WHERE id=$1 AND enabled`,[providerId]);
+    if(!row)throw new NotFoundException(); return row;
+  }
 
   async list(actor:Actor,query:{limit?:string;offset?:string}) {
     const {limit,offset}=page(query); const s=await this.authz.scope(actor,'providers.read');
