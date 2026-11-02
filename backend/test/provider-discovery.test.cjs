@@ -33,7 +33,7 @@ test('discover chooses matched provider, then default, otherwise 404',async()=>{
   const first=await service.discover(req);
   assert.equal(first.provider.slug,'alpha');
   assert.equal(first.match,'network');
-  assert.equal(first.api_base_url,'https://start.iptv.artelmik.ru/api/v1');
+  assert.equal(first.api_base_url,'https://miktv.artelmik.ru/api/v1');
   assert.match(called[0].sql,/ORDER BY masklen\(n\.network\) DESC/);
   assert.equal(called[0].args[0],'198.51.100.9');
   const fallback=new ProviderDiscoveryService({one:async(sql)=>sql.includes('is_default')?

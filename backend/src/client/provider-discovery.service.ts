@@ -42,7 +42,7 @@ export class ProviderDiscoveryService {
 
   async discover(req:Request) {
     const provider=await this.match(req);
-    const configured=process.env.CLIENT_PUBLIC_API_URL || 'https://start.iptv.artelmik.ru/api/v1';
+    const configured=process.env.CLIENT_PUBLIC_API_URL || 'https://miktv.artelmik.ru/api/v1';
     let url:URL;
     try{url=new URL(configured);}catch{throw new ServiceUnavailableException('CLIENT_PUBLIC_API_URL is invalid');}
     if(url.protocol!=='https:' || url.username || url.password || url.search || url.hash || !url.pathname.endsWith('/api/v1'))
