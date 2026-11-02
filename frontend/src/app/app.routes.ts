@@ -18,6 +18,7 @@ import { TerminalsComponent } from './pages/terminals.component';
 import { TerminalDetailsComponent } from './pages/terminal-details.component';
 import { EpgComponent } from './pages/epg.component';
 import { MessagesComponent } from './pages/messages.component';
+import { AdminUsersComponent } from './pages/admin-users.component';
 import { MessageDetailsComponent } from './pages/message-details.component';
 
 const adminGuard:CanActivateFn=()=>{
@@ -46,6 +47,7 @@ export const routes:Routes=[
     {path:'messages/:id',component:MessageDetailsComponent,title:'Рассылка · IPTV Control'},
     {path:'genres',component:GenresComponent,title:'Жанры · IPTV Control'},
     {path:'app-types',component:AppTypesComponent,title:'Приложения · IPTV Control'},
+    {path:'users',component:AdminUsersComponent,title:'Пользователи · IPTV Control'} ,
   ]},
   {path:'**',redirectTo:''}
 ];
