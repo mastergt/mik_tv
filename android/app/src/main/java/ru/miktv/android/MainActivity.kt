@@ -316,6 +316,14 @@ class MainActivity : Activity() {
             setPadding(0, 0, 0, 0)
             setTextColor(Color.rgb(164, 183, 203))
         })
+        val providerLogo = ImageView(this).apply { scaleType = ImageView.ScaleType.FIT_CENTER; contentDescription = "Логотип провайдера" }
+        top.addView(providerLogo, LinearLayout.LayoutParams(dp(if (session.isTv()) 110 else 72), dp(if (session.isTv()) 72 else 50)).apply { rightMargin=dp(12) })
+        api.get(session.baseUrl, session.token, "/client/branding") { response, _ ->
+            if (screen == "home") {
+                val url=(response as? JSONObject)?.optString("logo_url", "")?.takeIf { it.startsWith("/api/v1/providers/logos/") }
+                logos.show(providerLogo, session.baseUrl, url)
+            }
+        }
         top.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
         top.addView(button("⚙") { showSetup() }.apply {
             contentDescription = "Подключение и настройки"
