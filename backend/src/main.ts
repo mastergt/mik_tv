@@ -4,11 +4,13 @@ import * as log4js from 'log4js';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { json } from 'express';
 import { configureLogging, LoggerService, httpAccessLogger } from './logger/logger.service';
 
 async function main() {
   if (process.env.NODE_ENV==='production' && process.env.COOKIE_SECURE!=='true') throw new Error('COOKIE_SECURE=true required in production');
-  const app=await NestFactory.create(AppModule,{bodyParser:true, logger: new LoggerService()});
+  const app=await NestFactory.create(AppModule,{bodyParser:false, logger: new LoggerService()});
+  app.use(json({limit:'750kb'}));
   app.use(helmet());
   const accessLogger = httpAccessLogger();
   if (accessLogger) app.use(accessLogger);
