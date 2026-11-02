@@ -57,7 +57,7 @@ export class ProvidersService {
     if(!row)throw new NotFoundException(); return {logo_url:null};
   }
   async logoFile(filename:string) {
-    if(!/^[a-f0-9]{64}\\.png$/.test(filename))throw new NotFoundException();
+    if(!/^[a-f0-9]{64}\.png$/.test(filename))throw new NotFoundException();
     const found=await this.db.one('SELECT 1 FROM core.providers WHERE logo_sha=$1 LIMIT 1',[filename.slice(0,64)]);
     if(!found)throw new NotFoundException();
     try {return await readFile(resolve(this.logoDir,filename));}catch{throw new NotFoundException();}
