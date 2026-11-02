@@ -13,6 +13,11 @@ import { Provider } from '../core/models';
   <h2 mat-dialog-title>{{data?.id?'Настройки провайдера':'Новый провайдер'}}</h2>
   <mat-dialog-content>
     <div class="dialog-intro">Основные параметры и ограничения подключения устройств.</div>
+    <div class="span-two" style="padding:12px 0 20px"><strong>Логотип провайдера</strong><p>PNG с прозрачным фоном, рекомендуется 512 × 512 px. Допускается 128–1024 px, до 500 КБ. Изображение отображается целиком без обрезки.</p>
+      @if (logoUrl()) { <img [src]="logoUrl()" alt="Логотип провайдера" style="display:block;max-width:140px;max-height:100px;object-fit:contain;margin:8px 0"> }
+      @if (data?.id) { <input type="file" accept="image/png" (change)="uploadLogo($event)"><button mat-button type="button" (click)="removeLogo()">Удалить логотип</button> }
+      @else { <p>Создайте провайдера, чтобы загрузить логотип.</p> }
+    </div>
     <form [formGroup]="form" class="form-grid" id="provider-form" (ngSubmit)="save()">
       <mat-form-field appearance="outline"><mat-label>Наименование</mat-label><input matInput formControlName="name" required placeholder="Например, Мегалинк"></mat-form-field>
       <mat-form-field appearance="outline"><mat-label>Код (slug)</mat-label><input matInput formControlName="slug" required placeholder="mlink"></mat-form-field>
@@ -43,6 +48,7 @@ export class ProviderDialog {
   readonly data=inject<Provider|null>(MAT_DIALOG_DATA);readonly ref=inject(MatDialogRef<ProviderDialog>);
   private fb=inject(FormBuilder);private api=inject(CatalogApi);private feedback=inject(Feedback);
   readonly busy=signal(false);
+  readonly logoUrl=signal<string|null>(this.data?.logo_url??null);
   readonly form=this.fb.nonNullable.group({
     name:[this.data?.name??'',Validators.required],slug:[this.data?.slug??'',[Validators.required,Validators.pattern(/^[a-z][a-z0-9_-]+$/)]],
     timezone:[this.data?.timezone??'Europe/Moscow',Validators.required],
@@ -53,6 +59,15 @@ export class ProviderDialog {
     is_default:[this.data?.is_default??false],
     networks_text:[(this.data?.networks??[]).join('\n')]
   });
+  uploadLogo(event:Event) {
+    const input=event.target as HTMLInputElement;const file=input.files?.[0];if(!file||!this.data?.id)return;
+    if(file.type!=='image/png'||file.size>500*1024){this.feedback.error({message:'Только PNG до 500 КБ'});return;}
+    const reader=new FileReader();reader.onload=()=>{
+      const base64=String(reader.result).split(',')[1];
+      this.api.uploadProviderLogo(this.data!.id,base64).subscribe({next:r=>{this.logoUrl.set(r.logo_url+'?v='+Date.now());this.feedback.ok('Логотип загружен');},error:e=>this.feedback.error(e)});
+    };reader.readAsDataURL(file);
+  }
+  removeLogo(){if(!this.data?.id)return;this.api.removeProviderLogo(this.data.id).subscribe({next:()=>{this.logoUrl.set(null);this.feedback.ok('Логотип удалён');},error:e=>this.feedback.error(e)});}
   save(){if(this.form.invalid||this.busy())return;this.busy.set(true);
     const {networks_text,...values}=this.form.getRawValue();
     const payload={...values,networks:networks_text.split(/[\r\n,;]+/).map(s=>s.trim()).filter(Boolean)};
