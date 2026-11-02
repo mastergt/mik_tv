@@ -533,23 +533,43 @@ class MainActivity : Activity() {
         val actions = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         if (session.isTv()) body.addView(actions, LinearLayout.LayoutParams(0, -1, .8f))
         else body.addView(actions)
-        actions.addView(label("OK — смотреть · удержать — избранное", if (session.isTv()) 16f else 12f))
+        if (!session.isTv()) actions.addView(label("OK — смотреть · удержать — избранное", 12f))
         actions.addView(button("▶ Смотреть") { currentSelection()?.let(::play) })
         actions.addView(button("★ Избранное") { currentSelection()?.let(::favorite) })
         actions.addView(button("Обновить") { refresh() })
+        if (session.isTv()) {
+            actions.addView(android.view.View(this), LinearLayout.LayoutParams(1, 0, 1f))
+            val version = try { packageManager.getPackageInfo(packageName, 0).versionName ?: "?" }
+                catch (_: Exception) { "?" }
+            actions.addView(label("Версия " + version, 14f).apply {
+                setTextColor(Color.rgb(164, 183, 203))
+            })
+        }
         loadMore = button("Загрузить ещё") { loadPage() }
         page.addView(loadMore)
         status = label("Загрузка каналов…", 13f)
         page.addView(status)
-        // TV remote: LEFT from the channel list opens the genre selector.
-        // RIGHT on the selector returns focus to the previously selected channel.
+        // TV remote: one OK plays, LEFT selects genres, UP selects genres at first channel.
         if (session.isTv()) {
+            channelList!!.setItemsCanFocus(false)
             channelList!!.setOnKeyListener { _, keyCode, event ->
-                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && event.action == KeyEvent.ACTION_DOWN) {
-                    categorySpinner?.let { spinner ->
-                        if ((spinner.adapter?.count ?: 0) > 0) {
-                            spinner.requestFocus()
-                            spinner.performClick()
+                val select = keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+                    keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
+                val genres = keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                    (keyCode == KeyEvent.KEYCODE_DPAD_UP &&
+                     channelList!!.selectedItemPosition <= 0 && (adapter?.count ?: 0) > 0)
+                if (select) {
+                    if (event.action == KeyEvent.ACTION_UP && event.repeatCount == 0) {
+                        currentSelection()?.let(::play)
+                    }
+                    true
+                } else if (genres) {
+                    if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                        categorySpinner?.let { spinner ->
+                            if ((spinner.adapter?.count ?: 0) > 0) {
+                                spinner.requestFocus()
+                                spinner.performClick()
+                            }
                         }
                     }
                     true
@@ -635,7 +655,7 @@ class MainActivity : Activity() {
     }
 
     private fun updateCategories() {
-        val names = session.channels.flatMap { it.genres }.filter { it.isNotBlank() }.distinct().sortedWith(compareBy<String> { if (it.equals("Все", ignoreCase = true)) 0 else 1 }.thenBy { it })
+        val names = session.channels.flatMap { it.genres }.map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase(Locale.ROOT) }.sorted()
         if (category !in names) category = names.firstOrNull() ?: ""
         if (session.isTv()) {
             val spinner = categorySpinner ?: return
@@ -678,7 +698,7 @@ class MainActivity : Activity() {
         val previousId = currentSelection()?.id
         adapter?.update(session.channels.filter {
             (!favoritesOnly || session.favorites.contains(it.id)) &&
-                (category.isEmpty() || category.equals("Все", ignoreCase = true) || it.genres.contains(category)) &&
+                (category.isEmpty() || it.genres.any { genre -> genre.trim().equals(category, ignoreCase = true) }) &&
                 (search.isEmpty() || (it.number + " " + it.name + " " + it.genres.joinToString(" "))
                     .lowercase(Locale.ROOT).contains(search))
         })
