@@ -125,7 +125,8 @@ export class ShellComponent implements OnInit {
     {link:'/epg',name:'Телепрограмма EPG',icon:'event_note',permission:'epg.read'},
     {link:'/messages',name:'Сообщения',icon:'campaign',permission:'messages.read'}];
   readonly secondary:Nav[]=[{link:'/genres',name:'Жанры',icon:'category',permission:'genres.read'},
-    {link:'/app-types',name:'Типы приложений',icon:'apps',permission:'streams.read'}];
+    {link:'/app-types',name:'Типы приложений',icon:'apps',permission:'streams.read'},
+    {link:'/users',name:'Пользователи админки',icon:'admin_panel_settings',permission:'users.read'}];
   readonly pageName=signal('Обзор');
   constructor(){
     window.addEventListener('resize',()=>this.mobile.set(window.innerWidth<1000));
