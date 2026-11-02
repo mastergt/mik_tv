@@ -18,8 +18,8 @@ android {
         applicationId = "ru.miktv.android"
         minSdk = 23
         targetSdk = 35
-        versionCode = 11
-        versionName = "0.3.4"
+        versionCode = 12
+        versionName = "0.3.5"
     }
 
     signingConfigs {
@@ -50,6 +50,7 @@ android {
 }
 
 dependencies {
+    implementation("org.videolan.android:libvlc-all:3.7.7")
     val media3 = "1.11.1"
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-exoplayer-hls:$media3")
