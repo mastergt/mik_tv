@@ -151,7 +151,7 @@ data class MiniApp(
             val code = obj.optString("code")
             if (!code.matches(Regex("[a-z][a-z0-9_]*")) || code.length > 50) return null
             return MiniApp(code, obj.optString("name", code).take(200),
-                obj.optString("icon").takeIf { it.isNotBlank() }?.take(20),
+                obj.optString("icon", "").takeIf { !obj.isNull("icon") && it.isNotBlank() && it != "null" }?.take(20),
                 obj.optInt("sort_order", 100), obj.optInt("stream_count", 0).coerceAtLeast(0))
         }
     }
