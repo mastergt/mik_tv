@@ -38,7 +38,7 @@ class MainActivity : Activity() {
     private var categorySpinner: Spinner? = null
     private var loadMore: Button? = null
     private var search = ""
-    private var category = "Все"
+    private var category = ""
     private var favoritesOnly = false
     private var offset = 0
     private var hasMore = false
@@ -563,7 +563,7 @@ class MainActivity : Activity() {
         categorySpinner?.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, pos: Int, id: Long) {
-                category = categorySpinner?.selectedItem?.toString() ?: "Все"
+                category = categorySpinner?.selectedItem?.toString() ?: ""
                 redraw()
             }
         }
@@ -614,7 +614,8 @@ class MainActivity : Activity() {
     }
 
     private fun updateCategories() {
-        val names = listOf("Все") + session.channels.flatMap { it.genres }.distinct().sorted()
+        val names = session.channels.flatMap { it.genres }.filter { it.isNotBlank() }.distinct().sortedWith(compareBy<String> { if (it.equals("Все", ignoreCase = true)) 0 else 1 }.thenBy { it })
+        if (category !in names) category = names.firstOrNull() ?: ""
         if (session.isTv()) {
             val spinner = categorySpinner ?: return
             val items = ArrayAdapter(this, android.R.layout.simple_spinner_item, names)
@@ -656,7 +657,7 @@ class MainActivity : Activity() {
         val previousId = currentSelection()?.id
         adapter?.update(session.channels.filter {
             (!favoritesOnly || session.favorites.contains(it.id)) &&
-                (category == "Все" || it.genres.contains(category)) &&
+                (category.isEmpty() || category.equals("Все", ignoreCase = true) || it.genres.contains(category)) &&
                 (search.isEmpty() || (it.number + " " + it.name + " " + it.genres.joinToString(" "))
                     .lowercase(Locale.ROOT).contains(search))
         })
