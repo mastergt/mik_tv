@@ -14,6 +14,8 @@ export class CatalogApi {
   providers(){return this.http.get<Provider[]>(`${this.base}/providers`,{params:{limit:'200'}});}
   createProvider(v:Partial<Provider>){return this.http.post<Provider>(`${this.base}/providers`,v);}
   updateProvider(id:number,v:Partial<Provider>){return this.http.patch<Provider>(`${this.base}/providers/${id}`,v);}
+  uploadProviderLogo(id:number,image_base64:string){return this.http.post<{logo_url:string}>(`${this.base}/providers/${id}/logo`,{image_base64});}
+  removeProviderLogo(id:number){return this.http.delete<{logo_url:null}>(`${this.base}/providers/${id}/logo`);}
   appTypes(){return this.http.get<AppType[]>(`${this.base}/app-types`);}
   createAppType(v:Partial<AppType>){return this.http.post<AppType>(`${this.base}/app-types`,v);}
   updateAppType(id:number,v:Partial<AppType>){return this.http.patch<AppType>(`${this.base}/app-types/${id}`,v);}
