@@ -37,7 +37,7 @@ class ChannelLogos {
             val target = origin.resolve(path)
             // The API uses local /api/v1/epg/logos/... paths. Reject foreign hosts and protocols.
             if (target.scheme != origin.scheme || target.host != origin.host ||
-                target.port != origin.port || !target.path.startsWith("/api/v1/epg/logos/")) null
+                target.port != origin.port || !target.path.startsWith("/api/v1/epg/logos/") && !target.path.startsWith("/api/v1/providers/logos/")) null
             else target.toString()
         } catch (_: Exception) { null }
     }
