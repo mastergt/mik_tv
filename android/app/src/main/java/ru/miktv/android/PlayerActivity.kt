@@ -19,6 +19,13 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.net.Uri
+import org.videolan.libvlc.LibVLC
+import org.videolan.libvlc.Media
+import org.videolan.libvlc.MediaPlayer as VlcPlayer
+import org.videolan.libvlc.util.VLCVideoLayout
+import androidx.media3.common.C
+import androidx.media3.common.Tracks
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
@@ -42,6 +49,11 @@ class PlayerActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var player: ExoPlayer
     private lateinit var playerView: PlayerView
+    private lateinit var videoRoot: FrameLayout
+    private var vlcLayout: VLCVideoLayout? = null
+    private var vlcEngine: LibVLC? = null
+    private var vlcPlayer: VlcPlayer? = null
+    private var vlcMode = false
     private lateinit var title: TextView
     private lateinit var state: TextView
     private lateinit var nowNext: TextView
@@ -103,6 +115,7 @@ class PlayerActivity : Activity() {
             useController = false
         }
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        videoRoot = root
         root.addView(playerView, FrameLayout.LayoutParams(-1, -1))
         val overlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -186,10 +199,25 @@ class PlayerActivity : Activity() {
         )
 
         player.addListener(object : Player.Listener {
+            override fun onTracksChanged(tracks: Tracks) {
+                if (!active || vlcMode) return
+                val unsupportedMp2 = tracks.groups.any { group ->
+                    group.type == C.TRACK_TYPE_AUDIO && (0 until group.length).any { i ->
+                        val mime = group.getTrackFormat(i).sampleMimeType.orEmpty()
+                        (mime == "audio/mpeg-L2" || mime == "audio/mpeg") && !group.isTrackSupported(i)
+                    }
+                }
+                if (unsupportedMp2) {
+                    Log.i("mik_tv", "Unsupported MP2 audio: switching to LibVLC software decoder")
+                    startVlcForCurrentSource()
+                }
+            }
             override fun onPlayerError(error: PlaybackException) {
                 Log.w("mik_tv", "Player error stream=$streamId source=$sourceIndex: " +
                     error.errorCodeName + ": " + error.message, error)
-                if (active) trySource("Ошибка видеопотока: " + error.errorCodeName)
+                if (active && !vlcMode && (error.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED ||
+                    error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED)) startVlcForCurrentSource()
+                else if (active && !vlcMode) trySource("Ошибка видеопотока: " + error.errorCodeName)
             }
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (!active) return
@@ -222,6 +250,7 @@ class PlayerActivity : Activity() {
         sourceIndex = -1
         sources = emptyList()
         releaseLease()
+        stopVlc()
         player.stop()
         hideInfo()
         val channel = session.channels.find { it.id == streamId }
@@ -271,6 +300,7 @@ class PlayerActivity : Activity() {
             else state.text = "Архив не воспроизводится: " + problem
             return
         }
+        stopVlc()
         val source = sources[sourceIndex]
         state.text = "Подключение: источник " + (sourceIndex + 1) + " / " + sources.size
         cancelStallCheck()
@@ -289,6 +319,67 @@ class PlayerActivity : Activity() {
         player.playWhenReady = true
         bufferingSinceMs = System.currentTimeMillis()
         scheduleStallCheck(generation, sourceRevision)
+    }
+
+    /** LibVLC decodes MPEG Layer II audio in software when MediaCodec cannot. */
+    private fun startVlcForCurrentSource() {
+        if (!active || vlcMode || sourceIndex !in sources.indices) return
+        val source = sources[sourceIndex]
+        val expectedGeneration = generation
+        val expectedRevision = sourceRevision
+        try {
+            vlcMode = true
+            player.stop()
+            playerView.visibility = View.GONE
+            val layout = VLCVideoLayout(this)
+            videoRoot.addView(layout, 1, FrameLayout.LayoutParams(-1, -1))
+            vlcLayout = layout
+            val engine = LibVLC(this, arrayListOf("--network-caching=1500", "--audio-time-stretch"))
+            vlcEngine = engine
+            val mediaPlayer = VlcPlayer(engine)
+            vlcPlayer = mediaPlayer
+            mediaPlayer.attachViews(layout, null, false, false)
+            mediaPlayer.setEventListener { event ->
+                runOnUiThread {
+                    if (!active || generation != expectedGeneration || sourceRevision != expectedRevision || !vlcMode) return@runOnUiThread
+                    when (event.type) {
+                        VlcPlayer.Event.Playing -> {
+                            state.text = "LIVE · воспроизведение (MP2 / LibVLC)"
+                            lastReadyAt = System.currentTimeMillis()
+                            bufferingSinceMs = 0L
+                            session.saveLastChannel(streamId)
+                        }
+                        VlcPlayer.Event.EncounteredError -> trySource("Ошибка LibVLC")
+                        VlcPlayer.Event.EndReached -> if (dvrStart == null) trySource("Поток завершён")
+                    }
+                }
+            }
+            val media = Media(engine, Uri.parse(source.url))
+            mediaPlayer.media = media
+            media.release()
+            mediaPlayer.play()
+        } catch (e: Exception) {
+            Log.e("mik_tv", "LibVLC fallback unavailable", e)
+            stopVlc()
+            trySource("Программный аудиодекодер недоступен")
+        }
+    }
+
+    private fun stopVlc() {
+        vlcMode = false
+        val vlc = vlcPlayer
+        vlcPlayer = null
+        if (vlc != null) {
+            vlc.setEventListener(null)
+            vlc.stop()
+            vlc.detachViews()
+            vlc.release()
+        }
+        vlcLayout?.let { videoRoot.removeView(it) }
+        vlcLayout = null
+        vlcEngine?.release()
+        vlcEngine = null
+        if (::playerView.isInitialized) playerView.visibility = View.VISIBLE
     }
 
     private fun scheduleRecovery(problem: String) {
@@ -537,6 +628,7 @@ class PlayerActivity : Activity() {
         guideOverlay?.close()
         infoHide = null
         handler.removeCallbacksAndMessages(null)
+        stopVlc()
         if (::player.isInitialized) player.stop()
         releaseLease()
         super.onStop()
