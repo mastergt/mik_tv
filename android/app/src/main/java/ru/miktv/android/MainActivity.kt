@@ -541,6 +541,25 @@ class MainActivity : Activity() {
         page.addView(loadMore)
         status = label("Загрузка каналов…", 13f)
         page.addView(status)
+        // TV remote: LEFT from the channel list opens the genre selector.
+        // RIGHT on the selector returns focus to the previously selected channel.
+        if (session.isTv()) {
+            channelList!!.setOnKeyListener { _, keyCode, event ->
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && event.action == KeyEvent.ACTION_DOWN) {
+                    categorySpinner?.let { spinner ->
+                        spinner.requestFocus()
+                        spinner.performClick()
+                    }
+                    true
+                } else false
+            }
+            categorySpinner?.setOnKeyListener { _, keyCode, event ->
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && event.action == KeyEvent.ACTION_DOWN) {
+                    channelList?.requestFocus()
+                    true
+                } else false
+            }
+        }
         channelList!!.setOnItemClickListener { _, _, pos, _ -> adapter?.getChannel(pos)?.let(::play) }
         channelList!!.setOnItemSelectedListener(object : AdapterView.OnItemSelectedListener {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
