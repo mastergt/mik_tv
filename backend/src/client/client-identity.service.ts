@@ -4,6 +4,7 @@ import type {Request} from 'express';
 import * as argon2 from 'argon2';
 import { Db } from '../common/db';
 import { LoggerService } from '../logger/logger.service';
+import { ProviderDiscoveryService } from './provider-discovery.service';
 import { ClientSession, issueSecret, issueToken, jsonObject, numId, onlyKeys, textValue, tokenHash } from './client-auth';
 
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -12,7 +13,8 @@ const fieldLimits:Record<string,number>={device_name:120,manufacturer:100,model:
 
 @Injectable()
 export class ClientIdentityService {
-  constructor(@Inject(Db) private readonly db:Db,@Inject(LoggerService) private readonly log:LoggerService){}
+  constructor(@Inject(Db) private readonly db:Db,@Inject(LoggerService) private readonly log:LoggerService,
+    @Inject(ProviderDiscoveryService) private readonly discovery:ProviderDiscoveryService){}
   private async session(c:any,terminalId:string,abonentId:string|null,req:Request):Promise<string> {
     const token=issueToken();
     await c.query(`INSERT INTO subscribers.terminal_sessions
@@ -34,7 +36,11 @@ export class ClientIdentityService {
     onlyKeys(d,['device_uuid','provider_slug','device_secret','device_name','manufacturer','model','platform','os_version','app_version','lan_addr']);
     const uuid=textValue(d.device_uuid,'device_uuid',36)!;
     if(!UUID_RE.test(uuid))throw new BadRequestException('Invalid device_uuid');
-    const slug=textValue(d.provider_slug,'provider_slug',100)!;
+    const detected=await this.discovery.match(req);
+    const requestedSlug=textValue(d.provider_slug,'provider_slug',100,true);
+    if(requestedSlug && requestedSlug!==detected.slug)
+      throw new ForbiddenException('Provider does not match client IP');
+    const slug=detected.slug;
     const secret=d.device_secret===undefined?null:textValue(d.device_secret,'device_secret',100);
     if(secret&&!SECRET_RE.test(secret))throw new BadRequestException('Invalid device_secret');
     const metadata:Record<string,string|null>={};

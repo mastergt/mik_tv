@@ -45,6 +45,8 @@ class AppSession(private val context: Context) {
     val favorites = mutableSetOf<String>()
     var uiPreference: String = prefs.getString("ui_mode", "auto") ?: "auto"
         private set
+    var autoDiscover: Boolean = prefs.getBoolean("auto_discover", true)
+        private set
 
     init { restoreToken() }
 
@@ -66,6 +68,11 @@ class AppSession(private val context: Context) {
             authenticated = false
             restoreToken()
         }
+    }
+
+    fun setAutoDiscover(enabled: Boolean) {
+        autoDiscover = enabled
+        prefs.edit().putBoolean("auto_discover", enabled).apply()
     }
 
     fun setUiPreference(mode: String) {

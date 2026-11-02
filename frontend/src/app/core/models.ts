@@ -6,6 +6,7 @@ export interface Provider {
   id:number; name:string; slug:string; enabled:boolean; timezone:string;
   default_terminal_limit:number; default_concurrent_stream_limit:number;
   playback_history_enabled:boolean; stream_monitoring_enabled:boolean;
+  is_default?:boolean; networks?:string[];
 }
 export type Visibility = 'all'|'selected';
 export interface AppType { id:number; code:string; name:string; enabled:boolean }

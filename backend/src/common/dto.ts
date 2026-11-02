@@ -1,4 +1,4 @@
-import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Length, Max, Min, ValidateIf, ArrayUnique, IsUrl } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Length, Max, Min, ValidateIf, ArrayUnique, ArrayMaxSize, IsUrl } from 'class-validator';
 
 export class VisibilityDto {
   @IsOptional() @IsIn(['all','selected']) visibility?: 'all' | 'selected';
@@ -13,6 +13,8 @@ export class ProviderDto {
   @IsOptional() @IsInt() @Min(0) @Max(1000000) default_concurrent_stream_limit?: number;
   @IsOptional() @IsBoolean() playback_history_enabled?: boolean;
   @IsOptional() @IsBoolean() stream_monitoring_enabled?: boolean;
+  @IsOptional() @IsBoolean() is_default?: boolean;
+  @IsOptional() @IsArray() @ArrayUnique() @ArrayMaxSize(256) @IsString({each:true}) networks?: string[];
 }
 export class StreamDto extends VisibilityDto {
   @IsInt() @Min(1) number!: number;

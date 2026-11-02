@@ -52,7 +52,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (session.baseUrl.isBlank() || session.provider.isBlank()) showSetup() else connect()
+        if (session.autoDiscover) discoverAndConnect() else if (session.baseUrl.isBlank() || session.provider.isBlank()) showSetup() else connect()
     }
 
     private fun dp(n: Int) = (resources.displayMetrics.density * n + 0.5f).toInt()
@@ -91,14 +91,53 @@ class MainActivity : Activity() {
         if (::status.isInitialized) status.text = text
     }
 
+    private fun discoverAndConnect() {
+        screen = "discover"
+        epoch++
+        val page = layout()
+        page.addView(label("mik_tv · Автоопределение", 26f))
+        status = label("Поиск провайдера по IP через start.iptv.artelmik.ru…", 16f)
+        page.addView(status)
+        api.get("https://start.iptv.artelmik.ru/api/v1", null, "/client/discover") { response, error ->
+            if (screen != "discover") return@get
+            val obj = response as? JSONObject
+            val provider = obj?.optJSONObject("provider")
+            if (error != null || obj == null || provider == null) {
+                status.text = if (error?.status == 404) "Провайдер не найден для вашего IP-адреса"
+                    else error?.message ?: "Ошибка обнаружения сервера"
+                page.addView(button("Повторить поиск") { discoverAndConnect() })
+                page.addView(button("Настройки / ручное подключение") { showSetup() })
+                return@get
+            }
+            try {
+                val url = obj.getString("api_base_url")
+                val discovered = ApiUrl.normalize(url)
+                require(discovered.startsWith("https://")) { "Нужен HTTPS API" }
+                session.configure(discovered, provider.getString("slug"))
+                connect()
+            } catch (e: Exception) {
+                status.text = "Ошибка настроек: " + (e.message ?: "")
+                page.addView(button("Настройки") { showSetup() })
+            }
+        }
+    }
+
     private fun showSetup() {
         screen = "setup"; epoch++
         val page = layout()
         val fields = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         page.addView(ScrollView(this).apply { addView(fields) }, LinearLayout.LayoutParams(-1, 0, 1f))
         fields.addView(label("mik_tv  ·  Подключение", 26f))
-        fields.addView(label("URL сервера IPTV API", 15f))
-        val server = input("https://tv.example.ru", session.baseUrl)
+        val automatic = Switch(this).apply {
+            text = "Автоопределение провайдера по IP"
+            isChecked = session.autoDiscover
+            setTextColor(white)
+            textSize = 16f
+        }
+        fields.addView(automatic)
+        fields.addView(label("Адрес поиска: https://start.iptv.artelmik.ru", 13f))
+        fields.addView(label("URL сервера (ручной режим)", 15f))
+        val server = input("https://iptv.example.org", session.baseUrl)
         fields.addView(server)
         fields.addView(label("HTTPS рекомендуется: при HTTP пароль и секрет терминала передаются без шифрования.", 13f))
         val providersSpinner = Spinner(this)
@@ -112,16 +151,20 @@ class MainActivity : Activity() {
         modeSpinner.adapter = choices
         modeSpinner.setSelection(listOf("auto", "tv", "mobile").indexOf(session.uiPreference).coerceAtLeast(0))
         fields.addView(modeSpinner)
-        val connectButton = button("2. Подключиться") {
-            if (providers.isEmpty()) { notify("Сначала проверьте сервер"); return@button }
+        val connectButton = button("Подключиться") {
             try {
                 session.setUiPreference(listOf("auto", "tv", "mobile")[modeSpinner.selectedItemPosition])
-                session.configure(server.text.toString(), providers[providersSpinner.selectedItemPosition].first)
-                connect()
+                session.setAutoDiscover(automatic.isChecked)
+                if (automatic.isChecked) discoverAndConnect()
+                else {
+                    if (providers.isEmpty()) { notify("Сначала проверьте сервер"); return@button }
+                    session.configure(server.text.toString(), providers[providersSpinner.selectedItemPosition].first)
+                    connect()
+                }
             } catch (e: Exception) { notify(e.message ?: "Неверные настройки") }
         }
-        connectButton.isEnabled = false
-        fields.addView(button("1. Проверить сервер") {
+        connectButton.isEnabled = automatic.isChecked
+        val checkButton = button("Проверить сервер") {
             val url = try { ApiUrl.normalize(server.text.toString()) }
             catch (e: Exception) { notify(e.message ?: "Неправильный URL"); return@button }
             status.text = "Получение списка провайдеров…"
@@ -138,12 +181,20 @@ class MainActivity : Activity() {
                 providersSpinner.adapter = spinnerAdapter
                 val old = providers.indexOfFirst { it.first == session.provider }
                 if (old >= 0) providersSpinner.setSelection(old)
-                connectButton.isEnabled = providers.isNotEmpty()
+                connectButton.isEnabled = automatic.isChecked || providers.isNotEmpty()
                 status.text = if (providers.isEmpty()) "Нет активных провайдеров" else "Провайдеры загружены: " + providers.size
             }
-        })
+        }
+        fields.addView(checkButton)
         fields.addView(connectButton)
-        status = label("Укажите адрес сервера и нажмите «Проверить»", 14f)
+        val manualControls = listOf(server, providersSpinner, checkButton)
+        fun updateManualMode() {
+            manualControls.forEach { it.isEnabled = !automatic.isChecked }
+            connectButton.isEnabled = automatic.isChecked || providers.isNotEmpty()
+        }
+        automatic.setOnCheckedChangeListener { _, _ -> updateManualMode() }
+        updateManualMode()
+        status = label("Автопоиск или ручная настройка подключения", 14f)
         page.addView(status)
     }
 
@@ -178,7 +229,7 @@ class MainActivity : Activity() {
                 .put("manufacturer", Build.MANUFACTURER.take(100))
                 .put("model", Build.MODEL.take(100))
                 .put("os_version", Build.VERSION.RELEASE.take(80))
-                .put("app_version", "0.2.4")
+                .put("app_version", "0.3.0")
                 .put("device_name", "mik_tv Android")
                 .apply { session.deviceSecret()?.let { put("device_secret", it) } }
         } catch (e: Exception) {
