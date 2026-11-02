@@ -12,6 +12,7 @@ class UserCreate {
   @IsString() @Length(1,200) display_name!:string;
   @IsString() @Length(12,300) password!:string;
   @IsOptional() @IsEmail() email?:string;
+  @IsIn(['admin','superadmin']) role!: 'admin'|'superadmin';
 }
 class StatusDto { @IsIn(['pending','active','disabled']) status!:'pending'|'active'|'disabled'; }
 class AssignmentDto {
@@ -24,7 +25,11 @@ export class UsersController {
   constructor(@Inject(Db) private readonly db:Db, @Inject(Authz) private readonly authz:Authz, @Inject(Audit) private readonly audit:Audit){}
   @Get() async list(@Req()req:AdminRequest,@Query()q:{limit?:string,offset?:string}) {
     await this.authz.global(req.admin,'users.read');const {limit,offset}=page(q);
-    return this.db.rows(`SELECT id::text,username,display_name,email,status,created_at,last_login_at FROM auth.users ORDER BY id DESC LIMIT $1 OFFSET $2`,[limit,offset]);
+    return this.db.rows(`SELECT u.id::text,u.username,u.display_name,u.email,u.status,u.created_at,u.last_login_at,
+      COALESCE((SELECT r.code FROM auth.user_role_assignments a JOIN auth.roles r ON r.id=a.role_id
+       WHERE a.user_id=u.id AND a.provider_id IS NULL AND r.code IN ('superadmin','admin')
+       ORDER BY CASE WHEN r.code='superadmin' THEN 0 ELSE 1 END LIMIT 1),'other') AS role
+      FROM auth.users u ORDER BY u.id DESC LIMIT $1 OFFSET $2`,[limit,offset]);
   }
   @Get('roles') async roles(@Req()req:AdminRequest) {
     await this.authz.global(req.admin,'users.read');return this.db.rows('SELECT * FROM auth.roles ORDER BY id');
@@ -39,10 +44,13 @@ export class UsersController {
   @Post() async create(@Req()req:AdminRequest,@Body()body:unknown) {
     await this.authz.global(req.admin,'users.write');const v=dto(UserCreate,body);
     const hash=await argon2.hash(v.password,{type:argon2.argon2id});
+    const role=await this.db.one<{id:number}>('SELECT id FROM auth.roles WHERE code=$1',[v.role]);
+    if(!role) throw new BadRequestException('Apply migration 0013_admin_roles first');
     return this.db.tx(async c=>{
       try {
         const row=(await c.query(`INSERT INTO auth.users(username,password_hash,display_name,email,status)
-          VALUES($1,$2,$3,$4,'pending') RETURNING id::text,username,display_name,email,status`,[v.username,hash,v.display_name,v.email??null])).rows[0];
+          VALUES($1,$2,$3,$4,'active') RETURNING id::text,username,display_name,email,status`,[v.username,hash,v.display_name,v.email??null])).rows[0];
+        await c.query('INSERT INTO auth.user_role_assignments(user_id,role_id,granted_by) VALUES($1,$2,$3)',[row.id,role.id,req.admin.id]);
         await this.audit.write(c,req.admin.id,'users.create','auth.users',row.id,null,['username','display_name','email']);
         return row;
       }catch(e){dbError(e)}
