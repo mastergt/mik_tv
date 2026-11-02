@@ -49,6 +49,7 @@ class MainActivity : Activity() {
     private var guidePreview: TextView? = null
     private var previewRequest = 0
     private var categoryChips: LinearLayout? = null
+    private var playerWasLaunched = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -209,7 +210,7 @@ class MainActivity : Activity() {
             if (screen != "connecting") return@get
             if (error == null && response is JSONObject) {
                 session.markAuthenticated(response.optBoolean("authenticated", false))
-                showCatalog()
+                openLauncherAfterConnect()
             } else if (error?.status == 401) {
                 session.clearToken()
                 register()
@@ -229,7 +230,7 @@ class MainActivity : Activity() {
                 .put("manufacturer", Build.MANUFACTURER.take(100))
                 .put("model", Build.MODEL.take(100))
                 .put("os_version", Build.VERSION.RELEASE.take(80))
-                .put("app_version", "0.3.1")
+                .put("app_version", "0.3.2")
                 .put("device_name", "mik_tv Android")
                 .apply { session.deviceSecret()?.let { put("device_secret", it) } }
         } catch (e: Exception) {
@@ -248,12 +249,228 @@ class MainActivity : Activity() {
             try {
                 result.optString("device_secret").takeIf { it.isNotBlank() }?.let(session::saveDeviceSecret)
                 session.updateToken(result.getString("client_token"), false)
-                showCatalog()
+                openLauncherAfterConnect()
             } catch (e: Exception) {
                 notify("Не удалось сохранить учётные данные: " + e.message)
                 root.addView(button("Настройки") { showSetup() })
             }
         }
+    }
+
+    /**
+     * The root of mik_tv is a launcher, not a channel catalogue.
+     * One authorised endpoint returns enabled app types, including modules with no streams yet.
+     */
+    private fun openLauncherAfterConnect(allowAutostart: Boolean = true) {
+        screen = "loading_apps"
+        val requestEpoch = ++epoch
+        val page = layout()
+        page.addView(label("mik_tv", 28f))
+        status = label("Загрузка приложений провайдера…", 17f)
+        page.addView(status)
+        api.get(session.baseUrl, session.token, "/client/app-types") { response, error ->
+            if (screen != "loading_apps" || requestEpoch != epoch) return@get
+            val items = response as? JSONArray
+            session.modules.clear()
+            if (error == null && items != null) {
+                for (i in 0 until items.length()) {
+                    items.optJSONObject(i)?.let { MiniApp.fromJson(it) }?.let { session.modules.add(it) }
+                }
+            } else {
+                // Older API can still launch its TV content, but needs updating for
+                // administrator-controlled application types.
+                session.modules.add(MiniApp("tv", "ТВ", null, 0, 0))
+                notify("Список приложений недоступен. Проверьте обновление backend.")
+            }
+            session.modules.sortWith(compareBy<MiniApp>({ if (it.code == "tv") 0 else 1 }, { it.order }, { it.code }))
+            val target = session.autostartApp.takeIf { allowAutostart && it.isNotEmpty() }
+                ?.let { code -> session.modules.firstOrNull { it.code == code } }
+            if (target != null && target.code == "tv") openModule(target)
+            else showHome()
+        }
+    }
+
+    private fun moduleIcon(app: MiniApp): String = app.icon ?: when (app.code) {
+        "tv" -> "📺"
+        "cctv", "camera" -> "📹"
+        "intercom" -> "🚪"
+        "radio" -> "📻"
+        "vod", "video" -> "🎬"
+        else -> "▦"
+    }
+
+    private fun showHome() {
+        screen = "home"
+        epoch++
+        val page = layout().apply {
+            setPadding(dp(if (session.isTv()) 26 else 16), dp(18), dp(if (session.isTv()) 26 else 16), dp(12))
+            setBackgroundColor(Color.rgb(12, 21, 32))
+        }
+        val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        brand.addView(label("mik_tv", if (session.isTv()) 31f else 26f).apply {
+            setPadding(0, 0, 0, dp(1))
+            setTypeface(null, android.graphics.Typeface.BOLD)
+        })
+        brand.addView(label(session.provider, 14f).apply {
+            setPadding(0, 0, 0, 0)
+            setTextColor(Color.rgb(164, 183, 203))
+        })
+        top.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
+        top.addView(button("⚙") { showSetup() }.apply {
+            contentDescription = "Подключение и настройки"
+        })
+        page.addView(top)
+        page.addView(label("Приложения", if (session.isTv()) 28f else 24f).apply {
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(0, dp(20), 0, dp(12))
+        })
+
+        val scroll = ScrollView(this)
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        scroll.addView(list)
+        page.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        val entries = session.modules.toList()
+        if (entries.isEmpty()) {
+            list.addView(label("Для этого провайдера пока не настроены приложения.", 18f))
+        }
+        val columns = if (session.isTv()) 2 else 1
+        entries.chunked(columns).forEach { line ->
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            list.addView(row)
+            line.forEach { app ->
+                val supported = app.code == "tv"
+                val tile = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    minimumHeight = dp(if (session.isTv()) 145 else 112)
+                    setPadding(dp(18), dp(12), dp(16), dp(12))
+                    background = GradientDrawable().apply {
+                        setColor(if (supported) Color.rgb(37, 62, 88) else Color.rgb(31, 43, 58))
+                        cornerRadius = dp(18).toFloat()
+                        setStroke(dp(1), Color.rgb(53, 74, 96))
+                    }
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener { openModule(app) }
+                }
+                tile.addView(label(moduleIcon(app), if (session.isTv()) 42f else 37f).apply {
+                    gravity = android.view.Gravity.CENTER
+                    setPadding(0, 0, dp(16), 0)
+                })
+                val textBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                textBox.addView(label(app.name, if (session.isTv()) 25f else 22f).apply {
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    setPadding(0, 0, 0, dp(5))
+                    maxLines = 2
+                })
+                textBox.addView(label(if (supported) "Открыть" else "В разработке", 14f).apply {
+                    setTextColor(if (supported) gold else Color.rgb(154, 169, 187))
+                    setPadding(0, 0, 0, 0)
+                })
+                tile.addView(textBox, LinearLayout.LayoutParams(0, -2, 1f))
+                val params = LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    setMargins(dp(3), dp(4), dp(3), dp(4))
+                }
+                row.addView(tile, params)
+            }
+            if (line.size < columns) row.addView(android.view.View(this),
+                LinearLayout.LayoutParams(0, dp(1), 1f))
+        }
+        val footer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        val autostartName = session.modules.firstOrNull { it.code == session.autostartApp }?.name
+        footer.addView(button("Автозапуск: " + (autostartName ?: "выключен")) { chooseAutostart() },
+            LinearLayout.LayoutParams(0, dp(54), 1f))
+        footer.addView(button(if (session.authenticated) "Выйти" else "Войти") {
+            if (session.authenticated) logout() else showLogin()
+        })
+        page.addView(footer)
+        if (session.isTv()) scroll.requestFocus()
+    }
+
+    private fun chooseAutostart() {
+        val values = listOf("Не запускать автоматически") + session.modules.map { it.name }
+        val codes = listOf("") + session.modules.map { it.code }
+        val selected = codes.indexOf(session.autostartApp).coerceAtLeast(0)
+        AlertDialog.Builder(this).setTitle("Автозапуск мини-приложения")
+            .setSingleChoiceItems(values.toTypedArray(), selected) { dialog, index ->
+                session.setAutostartApp(codes[index])
+                dialog.dismiss()
+                showHome()
+            }
+            .setNegativeButton("Отмена", null).show()
+    }
+
+    private fun openModule(app: MiniApp) {
+        if (app.code != "tv") {
+            AlertDialog.Builder(this).setTitle(app.name)
+                .setMessage("Мини-приложение «" + app.name + "» пока в разработке. Его интерфейс будет добавлен отдельно.")
+                .setPositiveButton("Понятно", null).show()
+            return
+        }
+        openTvModule()
+    }
+
+    /** TV is a mini-app: launch the last watched channel directly into the fullscreen player. */
+    private fun openTvModule() {
+        screen = "tv_loading"
+        val requestEpoch = ++epoch
+        val page = layout()
+        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        header.addView(label("📺 ТВ", 25f), LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(button("Главная") { showHome() })
+        page.addView(header)
+        status = label("Загрузка телеканалов…", 17f)
+        page.addView(status)
+        session.channels.clear()
+        loadFavorites()
+        fun openTvPlayer() {
+            if (screen != "tv_loading" || epoch != requestEpoch) return
+            val chosen = session.channels.firstOrNull { it.id == session.lastChannel() }
+                ?: session.channels.firstOrNull()
+            if (chosen == null) {
+                status.text = "В этом ТВ-приложении нет доступных телеканалов."
+                page.addView(button("Вернуться к приложениям") { showHome() })
+            } else play(chosen)
+        }
+        fun requestPage(offsetValue: Int) {
+            if (screen != "tv_loading" || epoch != requestEpoch) return
+            api.get(session.baseUrl, session.token,
+                "/client/streams?app_type=tv&limit=500&offset=" + offsetValue) { response, error ->
+                if (screen != "tv_loading" || epoch != requestEpoch) return@get
+                val obj = response as? JSONObject
+                if (error != null || obj == null) {
+                    status.text = error?.message ?: "Не удалось получить телеканалы"
+                    page.addView(button("Повторить") { openTvModule() })
+                    page.addView(button("Главная") { showHome() })
+                    return@get
+                }
+                val items = obj.optJSONArray("items") ?: JSONArray()
+                for (i in 0 until items.length()) {
+                    items.optJSONObject(i)?.let { try { session.channels.add(Channel.fromJson(it)) } catch (_: Exception) {} }
+                }
+                val next = offsetValue + items.length()
+                if (obj.optBoolean("has_more", false) && items.length() > 0 && next < 3000) {
+                    status.text = "Загружено " + session.channels.size + " каналов…"
+                    requestPage(next)
+                } else openTvPlayer()
+            }
+        }
+        requestPage(0)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (playerWasLaunched) {
+            playerWasLaunched = false
+            showHome()
+        }
+    }
+
+    override fun onBackPressed() {
+        if (screen == "catalog" || screen == "tv_loading") showHome()
+        else super.onBackPressed()
     }
 
     private fun showCatalog() {
@@ -475,6 +692,7 @@ class MainActivity : Activity() {
             intent.putExtra("dvr_start", dvrStart)
             intent.putExtra("dvr_end", dvrEnd)
         }
+        playerWasLaunched = true
         startActivity(intent)
     }
 
@@ -550,7 +768,7 @@ class MainActivity : Activity() {
                         if (error != null || obj == null) { notify(error?.message ?: "Ошибка входа"); return@post }
                         try {
                             session.updateToken(obj.getString("client_token"), true)
-                            showCatalog()
+                            openLauncherAfterConnect(false)
                         } catch (e: Exception) { notify("Не удалось сохранить сеанс: " + e.message) }
                     }
                 }
@@ -583,7 +801,7 @@ class MainActivity : Activity() {
 
     override fun onConfigurationChanged(config: Configuration) {
         super.onConfigurationChanged(config)
-        if (screen == "catalog") showCatalog()
+        if (screen == "catalog") showCatalog() else if (screen == "home") showHome()
     }
 
     private inner class ChannelAdapter : BaseAdapter() {

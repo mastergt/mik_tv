@@ -51,6 +51,23 @@ function dates(from?:string,to?:string){
 @Injectable()
 export class ClientCatalogService {
   constructor(@Inject(Db) private readonly db:Db){}
+  // Expose active app types configured by admin; permissions determine stream counts.
+  // TV is always first; other modules follow the configured sort order.
+  async appTypes(ctx:ClientSession) {
+    return this.db.rows(`
+      SELECT t.id,t.code,t.name,t.icon,t.sort_order,
+        COALESCE(accessible.stream_count,0)::integer AS stream_count
+      FROM catalog.app_types t
+      LEFT JOIN (
+        SELECT s.app_type_id,count(*)::integer AS stream_count
+        ${STREAM_ACCESS_SQL}
+        GROUP BY s.app_type_id
+      ) accessible ON accessible.app_type_id=t.id
+      WHERE t.enabled
+      ORDER BY CASE WHEN t.code='tv' THEN 0 ELSE 1 END,t.sort_order,t.id
+    `,[ctx.provider_id,ctx.abonent_id]);
+  }
+
   async streamAllowed(ctx:ClientSession,streamId:string,c?:DbClient):Promise<boolean>{
     return !!(await this.db.one(`SELECT 1 ${STREAM_ACCESS_SQL} AND s.id=$3`,
       [ctx.provider_id,ctx.abonent_id,streamId],c));

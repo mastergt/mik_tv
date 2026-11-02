@@ -61,5 +61,7 @@ export class AppTypeDto {
   @IsString() @Length(2,50) code!: string;
   @IsString() @Length(1,200) name!: string;
   @IsOptional() @IsBoolean() enabled?:boolean;
+  @IsOptional() @IsInt() @Min(0) @Max(100000) sort_order?:number;
+  @IsOptional() @IsString() @Length(1,20) icon?:string|null;
   // ui_config remains a small typed JSON object in the admin panel; configure via dedicated endpoint in a later stage.
 }

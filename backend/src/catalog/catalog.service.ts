@@ -18,7 +18,7 @@ export class CatalogService {
   async appTypes(actor:Actor) {
     const s=await this.authz.scope(actor,'streams.read');
     if(!s.global&&!s.providers.length)throw new ForbiddenException('streams.read required');
-    return this.db.rows('SELECT * FROM catalog.app_types WHERE enabled=true ORDER BY id');
+    return this.db.rows("SELECT * FROM catalog.app_types ORDER BY CASE WHEN code='tv' THEN 0 ELSE 1 END,sort_order,id");
   }
   async genres(actor:Actor,providerIdRaw?:string) {
     const pid=providerIdRaw===undefined?undefined:providerId(providerIdRaw);
@@ -66,7 +66,7 @@ export class CatalogService {
     await this.authz.global(actor,'streams.write');const v=dto(AppTypeDto,raw);
     return this.db.tx(async c=>{
       try {
-        const q=sqlInsert('catalog.app_types',only(v,['code','name','enabled']));const item=(await c.query(q.sql,q.values)).rows[0];
+        const q=sqlInsert('catalog.app_types',only(v,['code','name','enabled','sort_order','icon']));const item=(await c.query(q.sql,q.values)).rows[0];
         await this.audit.write(c,actor.id,'app_types.create','catalog.app_types',String(item.id),null,Object.keys(v));return item;
       }catch(e){dbError(e)}
     });
@@ -75,7 +75,7 @@ export class CatalogService {
     await this.authz.global(actor,'streams.write');const id=intId(idRaw),v=dto(AppTypeDto,raw,true);
     return this.db.tx(async c=>{
       try {
-        const q=sqlUpdate('catalog.app_types',only(v,['code','name','enabled']),id);const item=(await c.query(q.sql,q.values)).rows[0];
+        const q=sqlUpdate('catalog.app_types',only(v,['code','name','enabled','sort_order','icon']),id);const item=(await c.query(q.sql,q.values)).rows[0];
         if(!item)throw new NotFoundException();
         await this.audit.write(c,actor.id,'app_types.update','catalog.app_types',id,null,Object.keys(v));return item;
       }catch(e){dbError(e)}
