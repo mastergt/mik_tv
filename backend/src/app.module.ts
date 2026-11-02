@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ClientBootstrapController, ClientController } from './client/client.controller';
 import { ClientGuard } from './client/client-auth';
 import { ClientIdentityService } from './client/client-identity.service';
+import { ProviderDiscoveryService } from './client/provider-discovery.service';
 import { ClientCatalogService } from './client/client-catalog.service';
 import { ClientPlaybackService } from './client/client-playback.service';
 import { ClientMessagesService } from './client/client-messages.service';
@@ -34,6 +35,6 @@ import { SubscribersService } from './subscribers/subscribers.service';
 import { TerminalsService } from './subscribers/terminals.service';
 @Module({
   controllers:[HealthController,AuthController,UsersController,ProvidersController,CatalogController,SubscribersController,TerminalsController,EpgController,MessagingController,ClientBootstrapController,ClientController],
-  providers:[Db,Audit,Authz,AuthService,ProvidersService,CatalogService,SubscribersService,TerminalsService,EpgService,EpgImportService,EpgLogoService,MessagingService,MessagingWorker,MessageImageService,ClientGuard,ClientIdentityService,ClientCatalogService,ClientPlaybackService,ClientMessagesService,ClientLeaseWorker,LoggerService,LoggerShutdown,{provide:APP_GUARD,useClass:AdminGuard}]
+  providers:[Db,Audit,Authz,AuthService,ProvidersService,CatalogService,SubscribersService,TerminalsService,EpgService,EpgImportService,EpgLogoService,MessagingService,MessagingWorker,MessageImageService,ClientGuard,ClientIdentityService,ProviderDiscoveryService,ClientCatalogService,ClientPlaybackService,ClientMessagesService,ClientLeaseWorker,LoggerService,LoggerShutdown,{provide:APP_GUARD,useClass:AdminGuard}]
 })
 export class AppModule {}

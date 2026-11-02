@@ -17,14 +17,16 @@ import { ProviderDialog } from '../dialogs/provider-dialog.component';
   <section class="surface panel">
     <div class="toolbar-row"><div class="search-custom"><span class="material-symbols-outlined">search</span><input aria-label="Поиск провайдера" placeholder="Поиск по названию или коду…" [(ngModel)]="search"></div><span class="pill">Найдено: {{filtered().length}}</span></div>
     @if(loading()){<mat-progress-bar mode="indeterminate" />}
-    <div class="table-wrap"><table class="ui-table"><thead><tr><th>ПРОВАЙДЕР</th><th>КОД</th><th>УСТРОЙСТВ</th><th>ПРОСМОТРОВ</th><th>СТАТУС</th><th></th></tr></thead>
+    <div class="table-wrap"><table class="ui-table"><thead><tr><th>ПРОВАЙДЕР</th><th>КОД</th><th>УСТРОЙСТВ</th><th>ПРОСМОТРОВ</th><th>СЕТИ</th><th>ПО УМОЛЧАНИЮ</th><th>СТАТУС</th><th></th></tr></thead>
       <tbody>@for(p of filtered();track p.id){<tr>
         <td><div class="title-cell"><span class="avatar"><span class="material-symbols-outlined">apartment</span></span><div><div class="title-name">{{p.name}}</div><div class="subtext">ID: {{p.id}}</div></div></div></td>
         <td><code>{{p.slug}}</code></td><td>{{p.default_terminal_limit===0?'Без лимита':p.default_terminal_limit}}</td>
         <td>{{p.default_concurrent_stream_limit===0?'Без лимита':p.default_concurrent_stream_limit}}</td>
+        <td>{{p.networks?.length??0}} подсетей</td>
+        <td>{{p.is_default?'Да':'—'}}</td>
         <td><span class="pill" [class.success]="p.enabled" [class.danger]="!p.enabled"><span class="pill-dot"></span>{{p.enabled?'Активен':'Выключен'}}</span></td>
         <td><div class="row-actions">@if(auth.can('providers.write')){<button mat-icon-button aria-label="Редактировать провайдера" (click)="edit(p)"><span class="material-symbols-outlined">edit_square</span></button>}</div></td>
-      </tr>}@empty {<tr><td colspan="6"><div class="empty"><span class="material-symbols-outlined">domain_disabled</span><strong>Провайдеров не найдено</strong><span>Попробуйте изменить запрос или добавьте первого провайдера</span></div></td></tr>}</tbody></table></div>
+      </tr>}@empty {<tr><td colspan="8"><div class="empty"><span class="material-symbols-outlined">domain_disabled</span><strong>Провайдеров не найдено</strong><span>Попробуйте изменить запрос или добавьте первого провайдера</span></div></td></tr>}</tbody></table></div>
   </section>
 </div>
 `,styles:[`

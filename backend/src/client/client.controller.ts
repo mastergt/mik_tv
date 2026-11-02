@@ -3,6 +3,7 @@ import type {Request} from 'express';
 import { Public } from '../auth/guard';
 import { ClientGuard, ClientRequest } from './client-auth';
 import { ClientIdentityService } from './client-identity.service';
+import { ProviderDiscoveryService } from './provider-discovery.service';
 import { ClientCatalogService } from './client-catalog.service';
 import { ClientPlaybackService } from './client-playback.service';
 import { ClientMessagesService } from './client-messages.service';
@@ -10,7 +11,9 @@ import { ClientMessagesService } from './client-messages.service';
 @Public()
 @Controller('client')
 export class ClientBootstrapController {
-  constructor(@Inject(ClientIdentityService) private readonly identity:ClientIdentityService){}
+  constructor(@Inject(ClientIdentityService) private readonly identity:ClientIdentityService,
+    @Inject(ProviderDiscoveryService) private readonly discovery:ProviderDiscoveryService){}
+  @Get('discover') discover(@Req() req:Request){return this.discovery.discover(req);}
   @Get('bootstrap') bootstrap(){return this.identity.bootstrap();}
   @Post('register') @HttpCode(201) register(@Body() data:unknown,@Req() req:Request){return this.identity.register(data,req);}
 }
