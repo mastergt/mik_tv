@@ -4,6 +4,7 @@ import { Public } from '../auth/guard';
 import { ClientGuard, ClientRequest } from './client-auth';
 import { ClientIdentityService } from './client-identity.service';
 import { ProviderDiscoveryService } from './provider-discovery.service';
+import { ProvidersService } from '../providers/providers.service';
 import { ClientCatalogService } from './client-catalog.service';
 import { ClientPlaybackService } from './client-playback.service';
 import { ClientMessagesService } from './client-messages.service';
@@ -25,7 +26,8 @@ export class ClientController {
   constructor(@Inject(ClientIdentityService) private readonly identity:ClientIdentityService,
     @Inject(ClientCatalogService) private readonly catalog:ClientCatalogService,
     @Inject(ClientPlaybackService) private readonly playback:ClientPlaybackService,
-    @Inject(ClientMessagesService) private readonly messages:ClientMessagesService){}
+    @Inject(ClientMessagesService) private readonly messages:ClientMessagesService,
+    @Inject(ProvidersService) private readonly providers:ProvidersService){}
   @Post('auth/login') @HttpCode(200) login(@Req() req:ClientRequest,@Body() data:unknown){
     return this.identity.login(req.client,data,req);
   }
@@ -33,6 +35,7 @@ export class ClientController {
   @Post('auth/logout') @HttpCode(200) logout(@Req() req:ClientRequest){return this.identity.logout(req.client);}
   @Get('me') me(@Req() req:ClientRequest){return this.identity.me(req.client);}
   @Post('heartbeat') @HttpCode(200) heartbeat(@Req() req:ClientRequest){return this.identity.heartbeat(req.client);}
+  @Get('branding') branding(@Req() req:ClientRequest){return this.providers.branding(req.client.provider_id);}
   @Get('app-types') appTypes(@Req() req:ClientRequest){return this.catalog.appTypes(req.client);}
   @Get('streams') streams(@Req() req:ClientRequest,
     @Query() q:{limit?:string;offset?:string;app_type?:string}){return this.catalog.streams(req.client,q);}
