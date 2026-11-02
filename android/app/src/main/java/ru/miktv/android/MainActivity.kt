@@ -96,9 +96,9 @@ class MainActivity : Activity() {
         epoch++
         val page = layout()
         page.addView(label("mik_tv · Автоопределение", 26f))
-        status = label("Поиск провайдера по IP через start.iptv.artelmik.ru…", 16f)
+        status = label("Поиск провайдера по IP через miktv.artelmik.ru…", 16f)
         page.addView(status)
-        api.get("https://start.iptv.artelmik.ru/api/v1", null, "/client/discover") { response, error ->
+        api.get("https://miktv.artelmik.ru/api/v1", null, "/client/discover") { response, error ->
             if (screen != "discover") return@get
             val obj = response as? JSONObject
             val provider = obj?.optJSONObject("provider")
@@ -135,7 +135,7 @@ class MainActivity : Activity() {
             textSize = 16f
         }
         fields.addView(automatic)
-        fields.addView(label("Адрес поиска: https://start.iptv.artelmik.ru", 13f))
+        fields.addView(label("Адрес поиска: https://miktv.artelmik.ru", 13f))
         fields.addView(label("URL сервера (ручной режим)", 15f))
         val server = input("https://iptv.example.org", session.baseUrl)
         fields.addView(server)
@@ -229,7 +229,7 @@ class MainActivity : Activity() {
                 .put("manufacturer", Build.MANUFACTURER.take(100))
                 .put("model", Build.MODEL.take(100))
                 .put("os_version", Build.VERSION.RELEASE.take(80))
-                .put("app_version", "0.3.0")
+                .put("app_version", "0.3.1")
                 .put("device_name", "mik_tv Android")
                 .apply { session.deviceSecret()?.let { put("device_secret", it) } }
         } catch (e: Exception) {

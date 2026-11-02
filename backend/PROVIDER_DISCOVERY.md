@@ -37,7 +37,7 @@
    set +a
    psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/migrations/0010_provider_discovery.sql
    ```
-3. В `backend/.env` **добавить**:
+3. В `backend/.env` **добавить или изменить существующую** переменную:
    ```ini
    CLIENT_PUBLIC_API_URL=https://start.iptv.artelmik.ru/api/v1
    ```
