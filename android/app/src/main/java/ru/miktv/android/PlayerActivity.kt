@@ -207,8 +207,14 @@ class PlayerActivity : Activity() {
                         (mime == "audio/mpeg-L2" || mime == "audio/mpeg") && !group.isTrackSupported(i)
                     }
                 }
-                if (unsupportedMp2) {
-                    Log.i("mik_tv", "Unsupported MP2 audio: switching to LibVLC software decoder")
+                val unsupportedMpeg2Video = tracks.groups.any { group ->
+                    group.type == C.TRACK_TYPE_VIDEO && (0 until group.length).any { i ->
+                        val mime = group.getTrackFormat(i).sampleMimeType.orEmpty()
+                        (mime == "video/mpeg2" || mime == "video/mpeg") && !group.isTrackSupported(i)
+                    }
+                }
+                if (unsupportedMp2 || unsupportedMpeg2Video) {
+                    Log.i("mik_tv", "Unsupported MPEG codec: MP2 audio=$unsupportedMp2 MPEG-2 video=$unsupportedMpeg2Video; switching to LibVLC")
                     startVlcForCurrentSource()
                 }
             }
@@ -220,7 +226,7 @@ class PlayerActivity : Activity() {
                 else if (active && !vlcMode) trySource("Ошибка видеопотока: " + error.errorCodeName)
             }
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (!active) return
+                if (!active || vlcMode) return
                 if (playbackState == Player.STATE_READY) {
                     state.text = if (dvrStart == null) "LIVE · воспроизведение" else "АРХИВ · воспроизведение"
                     lastReadyAt = System.currentTimeMillis()
@@ -344,7 +350,7 @@ class PlayerActivity : Activity() {
                     if (!active || generation != expectedGeneration || sourceRevision != expectedRevision || !vlcMode) return@runOnUiThread
                     when (event.type) {
                         VlcPlayer.Event.Playing -> {
-                            state.text = "LIVE · воспроизведение (MP2 / LibVLC)"
+                            state.text = (if (dvrStart == null) "LIVE" else "АРХИВ") + " · воспроизведение (LibVLC)"
                             lastReadyAt = System.currentTimeMillis()
                             bufferingSinceMs = 0L
                             session.saveLastChannel(streamId)
